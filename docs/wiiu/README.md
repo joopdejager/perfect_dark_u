@@ -44,7 +44,7 @@ second back end that turns them into GX2 calls, GX2 being the Wii U's graphics A
 | `port/wiiu/` | Wii U platform layer: startup, file paths on the SD card, input, audio output |
 | `dist/wiiu/` | Packaging files: icon, app metadata for the `.wuhb` package |
 | `third_party/` | Code borrowed from other projects, each keeping its own licence |
-| `docs/wiiu/` | This documentation |
+| `docs/wiiu/` | This documentation ([linux-build.md](linux-build.md): building and running the PC version) |
 
 None of these exist yet except this folder. The table shows where things will go.
 
@@ -77,7 +77,7 @@ None of these exist yet except this folder. The table shows where things will go
 | 5. Input and audio | GamePad, Pro Controller, Wii Remotes; audio output | Playable start to finish |
 | 6. Speed | Profiling, using all 3 CPU cores, faster vertex maths | Smooth in single player, then multiplayer |
 
-Current phase: **1, Foundations.**
+Current phase: **2, Big-endian.** Phase 1 is done; see [linux-build.md](linux-build.md).
 
 ## Keeping up with the PC port
 
