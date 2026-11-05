@@ -26,3 +26,11 @@ tools/mkrom/mkrom
 CppProperties.json
 .idea
 cmake-build-debug
+
+# Wii U port: never commit ROMs in any format, or Wii U build outputs
+*.z64
+*.n64
+*.v64
+*.gbc
+*.rpx
+*.wuhb
