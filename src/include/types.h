@@ -328,9 +328,12 @@ struct prop {
 
 struct packedpad {
 #ifdef PLATFORM_BIG_ENDIAN
-	s32 liftnum : 4;
+	// Same order as the N64 original: big-endian compilers allocate bitfields
+	// from the most significant bit, so flags is the top 18 bits, matching
+	// how convertPads() in port/src/preprocess/filepads.c decodes the raw word.
 	s32 flags : 18;
 	s32 room : 10;
+	s32 liftnum : 4;
 #else
 	s32 liftnum : 4;
 	s32 room : 10;

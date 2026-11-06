@@ -31,6 +31,12 @@
 #elif defined(__arm__) || defined(_M_ARM)
 	// assume armv7
 	#define PLATFORM_ARM 7
+#elif defined(__powerpc64__) || defined(__ppc64__)
+	#define PLATFORM_PPC 64
+	#define PLATFORM_64BIT 1
+#elif defined(__powerpc__) || defined(__ppc__) || defined(__PPC__)
+	// 32-bit PowerPC, e.g. the Wii U's Espresso CPU
+	#define PLATFORM_PPC 32
 #else
 	#error "Unknown CPU arch."
 #endif
