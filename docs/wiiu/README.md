@@ -77,7 +77,7 @@ None of these exist yet except this folder. The table shows where things will go
 | 5. Input and audio | GamePad, Pro Controller, Wii Remotes; audio output | Playable start to finish |
 | 6. Speed | Profiling, using all 3 CPU cores, faster vertex maths | Smooth in single player, then multiplayer |
 
-Current phase: **2, Big-endian.** Phase 1 is done; see [linux-build.md](linux-build.md).
+Current phase: **3, Wii U build.** Phase 1 is done ([linux-build.md](linux-build.md)), and so is phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
 
 ## Keeping up with the PC port
 

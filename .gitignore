@@ -38,3 +38,4 @@ cmake-build-debug
 # PowerPC test build and its libraries (docs/wiiu/big-endian.md)
 build-ppc/
 build-ppc-deps/
+build-ppc-sysroot/

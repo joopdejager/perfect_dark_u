@@ -86,6 +86,12 @@ u8 *preprocessMpConfigs(u8* data, u32 size, u32* outSize)
 
 u8 *preprocessTexturesList(u8* data, u32 size, u32* outSize)
 {
+#ifdef PLATFORM_BIG_ENDIAN
+	// The ROM's layout is already the native one on big-endian CPUs, as on
+	// the N64. The bit shuffling below is only right for little-endian.
+	return NULL;
+#endif
+
 	struct texture *tex = (struct texture *)data;
 	const u32 count = size / sizeof(*tex);
 	for (u32 i = 0; i < count; ++i, ++tex) {
