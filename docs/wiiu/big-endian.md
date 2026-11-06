@@ -59,14 +59,48 @@ cmake -G"Unix Makefiles" -Bbuild-ppc \
 cmake --build build-ppc -j4
 ```
 
-The configure step should print `Target is big-endian: TRUE`. Run it with:
-
-```bash
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy qemu-ppc -L /usr/powerpc-linux-gnu -E LD_LIBRARY_PATH=$D/lib build-ppc/pd.ppc
-```
+The configure step should print `Target is big-endian: TRUE`.
 
 `-DGL_LIBRARY=dl` is a placeholder: the renderer loads OpenGL at runtime
-through SDL, and there's no PowerPC OpenGL library to link against anyway.
+through SDL, so nothing needs linking against a PowerPC OpenGL library.
+
+## Running it with the ROM
+
+To actually play under qemu-ppc, the game needs PowerPC versions of glibc,
+Mesa (software OpenGL), the X11 client libraries and SDL2 with X11 support.
+Debian still publishes these for 32-bit PowerPC in its "Ports" archive. This
+script downloads and verifies them (it needs network access to `deb.debian.org`):
+
+```bash
+sudo apt-get install debian-archive-keyring gpgv xz-utils xvfb imagemagick
+```
+
+```bash
+tools/wiiu/fetch-ppc-sysroot.sh
+```
+
+Then run the game on a virtual display, here booting straight into the
+Defection mission and saving a screenshot every 60 seconds:
+
+```bash
+SHOTS=shots tools/wiiu/run-ppc.sh /path/to/pd.ntsc-final.z64 --boot-stage 0x30
+```
+
+`--skip-intro` boots into the Carrington Institute instead. Expect it to be
+slow: well under one frame per second, because QEMU emulates every PowerPC
+instruction and Mesa draws everything in software. It's for checking that
+things work, not for playing.
+
+Three workarounds are built into `run-ppc.sh`, each for a quirk of this test
+setup rather than of the game:
+
+- **`+byteswappedclients`** on the virtual X server, which otherwise refuses a
+  big-endian program.
+- **EGL instead of GLX** (`SDL_VIDEO_FORCE_EGL`). The X server's own OpenGL
+  extension fails with byte-swapped clients, so Mesa renders on the client side
+  and sends finished images over the plain X protocol.
+- **Mesa's `softpipe` renderer.** The faster `llvmpipe` crashes because its code
+  generator doesn't support 32-bit PowerPC.
 
 ## Changes made
 
@@ -77,6 +111,9 @@ through SDL, and there's no PowerPC OpenGL library to link against anyway.
 | `src/include/types.h` | Fix the big-endian bitfield order of `struct packedpad` | **The first real big-endian bug.** See below. |
 | `cmake/toolchains/powerpc-linux-gnu.cmake` | New: cross-compile settings | For the test build. |
 | `tools/wiiu/build-ppc-deps.sh` | New: builds PowerPC SDL2 and zlib | For the test build. |
+| `tools/wiiu/fetch-ppc-sysroot.sh`, `tools/wiiu/debfetch.py` | New: download and verify Debian's PowerPC system libraries | So the test build can open a window and draw. |
+| `tools/wiiu/run-ppc.sh` | New: runs the test build under qemu-ppc on a virtual display | Optionally saves screenshots. |
+| `port/src/preprocess/misc.c`, `port/src/preprocess/gbi.c`, `port/fast3d/gfx_pc.cpp` | Big-endian fixes | See "Bugs found by running with the ROM" below. |
 
 ## Bug found: pad headers
 
@@ -124,16 +161,50 @@ aren't affected.
 32-bit code paths themselves are already tested upstream, because the PC port
 ships i686 builds. So the parts that are new on the Wii U are the big-endian ones.
 
-## What's still untested
+## Bugs found by running with the ROM
 
-The game starts under qemu-ppc and stops where the PC build does with no
-display: opening an OpenGL window. Getting further needs two things:
+The code review above checked everything written in terms of the byte-swap
+macros, and that code turned out to be sound. Running the game found three more
+bugs, all in hand-written bit tricks that were only right on little-endian.
+Each fix applies only to big-endian builds; the PC code paths are unchanged.
 
-1. **The ROM.** Every converter in `port/src/preprocess/` runs on ROM data, so
-   their big-endian behaviour can only be checked with it.
-2. **OpenGL on emulated PowerPC.** That would mean building Mesa for PowerPC
-   from source, which is a large job. A cheaper option may be to test the
-   loaders and converters without the renderer.
+| Bug | Where | What happened | Fix |
+|---|---|---|---|
+| Texture list scrambled | `port/src/preprocess/misc.c`, `preprocessTexturesList()` | The loader reshuffles each entry's bits (shift, byte swap, swap two 4-bit fields), and the shuffle isn't one of the macros, so it ran on big-endian too. Every texture offset became garbage, and the first texture load crashed copying 241 KB. | Skip the conversion: the ROM layout is already the native one. |
+| Graphics commands with their words swapped | `port/src/preprocess/gbi.c`, `gbiConvertGdl()` and `gbiGdlRewriteAddrs()` | On 32-bit builds a command is held as one 64-bit number, and the code assumed its first word is the low half. That's only true on little-endian. Converted display lists had their two words reversed: "Unknown GBI opcode". | Keep the first word in the high half on big-endian, and read the opcode from there. The address rewrite stays a no-op, as it is on 32-bit PC builds. |
+| Text drawn as solid blocks | `port/fast3d/gfx_pc.cpp`, `palette_to_rgba32()` | Font glyphs use IA16 palettes (intensity plus alpha). The N64 keeps intensity in the high byte; the renderer reads it from the low byte, which only works on PCs because the palette bytes get swapped twice. On big-endian they're swapped zero times, so glyphs came out fully opaque. | On big-endian, read IA16 the N64 way. |
 
-Without either, the remaining runtime testing moves to the Wii U itself in
-phase 3, where the game will run natively.
+How they were found, which is worth repeating for future bugs:
+
+- **A debugger** (`gdb-multiarch` attached to `qemu-ppc -g`) pinpointed the
+  texture crash.
+- **Screenshots** of the virtual display showed the wrong-opcode error and the
+  block text.
+- **Comparing data between x86 and PowerPC** settled where the remaining
+  problems are not. With a temporary hook logging a fingerprint of every texture
+  and vertex colour table the renderer received, 74 of 75 textures and 58 of 61
+  colour tables were byte-identical between the two. The few differences were
+  timing: animated textures and lighting caught at different moments.
+
+## Status
+
+Under qemu-ppc with the ROM, the PowerPC build:
+
+- boots and draws the 3D title logo correctly;
+- loads the Carrington Institute level, with geometry, textures, models and
+  text all correct;
+- loads the Defection mission (`--boot-stage 0x30`) and plays its opening
+  fly-through of the city;
+- runs for several minutes without crashing.
+
+## Known issues
+
+- **Yellow-green tint.** Frames on PowerPC look tinted compared with x86
+  (grey walls come out yellow-green). Textures and lighting colours reach the
+  renderer identical to x86, and a small test program confirmed Mesa itself
+  draws and reads back correct colours. So the cause is somewhere between
+  drawing a frame and getting it onto the virtual display, possibly specific to
+  this test setup. It may never appear on the Wii U, which has its own graphics
+  back end. Parked for now, since it doesn't block anything.
+- **Not tested yet:** audio output (the test runs use SDL's dummy audio
+  driver), saving, and controller input.

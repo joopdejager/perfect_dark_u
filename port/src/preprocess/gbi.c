@@ -157,12 +157,24 @@ void gbiGdlRewriteAddrs(u8 *dst, u32 offset)
 #if HOST_DWORDS_PER_CMD == 2
 		idx = 1;
 		opcode = (cmd >> 24) & 0xff;
+#elif defined(PLATFORM_BIG_ENDIAN)
+		// On big-endian the command's first word (w0) is the high half of
+		// the 64-bit value, not the low half.
+		opcode = (cmd >> 56) & 0xff;
 #endif
 		cmd = (u64)opcode << 56;
 
+#if HOST_DWORDS_PER_CMD == 1 && defined(PLATFORM_BIG_ENDIAN)
+		// On 32-bit little-endian builds the call below rewrites the low half
+		// of the 64-bit value, which is w0. The segment bits it tests are part
+		// of the opcode there and never equal 5, so it never changes anything.
+		// Skip it on big-endian, where the low half would be w1, to keep the
+		// tested 32-bit behaviour.
+#else
 		if (CMD_HAS_ADDR(cmd)) {
 			cmds[idx] = gbiRewriteAddr(cmds[idx], opcode);
 		}
+#endif
 
 		if (CMD_IS_SEGMENTED(cmd)) {
 			gfxcmd->words.w1 |= 1;
@@ -189,6 +201,15 @@ u32 gbiConvertGdl(u8 *dst, u32 dstpos, u8 *src, u32 srcpos, int segment_cmds)
 
 		if (segment_cmds && CMD_IS_SEGMENTED(cmd)) {
 			host_cmd[1] |= 1;
+		}
+#elif defined(PLATFORM_BIG_ENDIAN)
+		// The first word (w0) must come first in memory, and on big-endian
+		// that's already the high half of the 64-bit value.
+		host_cmd[0] = cmd;
+
+		if (segment_cmds && CMD_IS_SEGMENTED(cmd)) {
+			Gfx* gfxcmd = (Gfx*)host_cmd;
+			gfxcmd->words.w1 |= 1;
 		}
 #else
 		host_cmd[0] = (cmd >> 32) | ((cmd & 0xffffffff) << 32);
