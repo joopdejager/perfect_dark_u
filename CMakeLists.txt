@@ -43,8 +43,16 @@ if(TARGET_ARCH STREQUAL "i386")
   set(TARGET_ARCH "i686")
 endif()
 
-# TODO
-set(TARGET_IS_BIG_ENDIAN FALSE)
+# Byte order of the target CPU. CMake 3.20+ knows it from the compiler;
+# older versions fall back to a test compile.
+if(CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
+  set(TARGET_IS_BIG_ENDIAN TRUE)
+elseif(CMAKE_C_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")
+  set(TARGET_IS_BIG_ENDIAN FALSE)
+else()
+  include(TestBigEndian)
+  test_big_endian(TARGET_IS_BIG_ENDIAN)
+endif()
 
 if((TARGET_ARCH MATCHES "unknown") OR (TARGET_ARCH STREQUAL ""))
   message(FATAL_ERROR "Unknown target arch")
@@ -55,6 +63,7 @@ else()
 endif()
 
 message(STATUS "Target arch: ${TARGET_ARCH}")
+message(STATUS "Target is big-endian: ${TARGET_IS_BIG_ENDIAN}")
 
 # Determine target OS and platform identifier ($arch-$os)
 
@@ -149,6 +158,10 @@ add_definitions(
 
 if(TARGET_IS_64BIT)
   add_definitions(-DPLATFORM_64BIT=1)
+endif()
+
+if(TARGET_IS_BIG_ENDIAN)
+  add_definitions(-DPLATFORM_BIG_ENDIAN=1)
 endif()
 
 # Compiler flags

@@ -34,3 +34,7 @@ cmake-build-debug
 *.gbc
 *.rpx
 *.wuhb
+
+# PowerPC test build and its libraries (docs/wiiu/big-endian.md)
+build-ppc/
+build-ppc-deps/
