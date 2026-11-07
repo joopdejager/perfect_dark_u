@@ -64,8 +64,7 @@ problems can be read off the screen without a PC attached.
 
 ## Debug overlay
 
-Hold **ZL** and press **Minus** to show or hide numbers in the top left
-corner:
+Press **Minus** to show or hide numbers in the top left corner:
 
 | Line | Meaning |
 |---|---|
@@ -75,9 +74,52 @@ corner:
 | draws, tris, verts | What the renderer sent to the GPU that frame |
 | shaders, free mem | Shaders made so far, and free main memory |
 
-ZL alone wasn't usable for this: by default it's R, the aim button. Minus
-isn't used by the game. The toggle is in `port/wiiu/gfx_wiiu.c`
+Minus isn't used by the game (it's SDL's "Back" button, which the default
+bindings leave free). The toggle is in `port/wiiu/gfx_wiiu.c`
 (`wiiu_handle_events`), the overlay in `port/wiiu/wiiu_overlay.c`.
+
+## Controls
+
+The Wii U build uses the PC port's controller bindings unchanged
+(`pcjoybinds` in `port/src/input.c`). SDL reports the GamePad's and Pro
+Controller's buttons by the names printed on them, so "A" below is the
+button labelled A.
+
+The game only understands N64 controller buttons, so each Wii U button
+stands in for one. The game starts in the PC port's own control style
+("ExtendedControls" in `pd.ini`, on by default); it's set up for two
+sticks, and uses the N64 buttons like this:
+
+| Wii U | N64 button the game sees | Does (PC port control style) |
+|---|---|---|
+| Right stick | Control stick | Look and turn |
+| Left stick | Second stick (the 2-controller styles' second pad) | Walk and strafe |
+| ZR | Z | Fire; accept in menus |
+| ZL | R | Aim |
+| R | L | Switch to the weapon's other fire mode |
+| L | D-pad down | Weapon wheel |
+| A | A | Use (doors, switches); accept in menus |
+| B | D-pad left | Previous weapon; back in menus |
+| X | X (extra button `0x40`) | Reload |
+| Y | Y (extra button `0x80`) | Next weapon |
+| + | Start | Pause menu |
+| D-pad | C buttons (up, down, left, right) | Whatever the C buttons do in the chosen control style |
+| Left stick click | Extra button `0x8000` | Crouch: stand, half, full |
+| Minus | (none) | Debug overlay |
+| Right stick click | (none) | Nothing |
+
+Combinations from the PC port: A + ZR, or R + ZR, fires the other fire mode
+once; A + B, or A + X, detonates remote mines.
+
+Two settings change this: **SwapSticks** (on by default) makes the right
+stick the N64 control stick; with it off the left stick is. With
+**ExtendedControls** off, the game uses its original N64 control styles
+(1.1 to 2.4, picked in the game's options), where the N64 buttons mean what
+they did on the N64. Both are in `pd.ini`. So is a per-button binding list,
+which can be edited to remap.
+
+Nothing has been changed for the Wii U yet. Phase 5 is where the bindings,
+Wii Remotes and the touch screen get looked at properly.
 
 ## Name entry keyboard
 

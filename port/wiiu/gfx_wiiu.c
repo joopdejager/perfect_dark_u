@@ -117,13 +117,9 @@ static void wiiu_handle_events(void)
 		if (ev.type == SDL_QUIT) {
 			exit(0);
 		}
-		// ZL + Minus shows or hides the debug overlay. ZL alone is a game
-		// button (aim, by default), Minus isn't used by the game.
+		// Minus shows or hides the debug overlay; the game doesn't use it
 		if (ev.type == SDL_CONTROLLERBUTTONDOWN && ev.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
-			SDL_GameController *gc = SDL_GameControllerFromInstanceID(ev.cbutton.which);
-			if (gc && SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16384) {
-				wiiuOverlayToggle();
-			}
+			wiiuOverlayToggle();
 		}
 	}
 }

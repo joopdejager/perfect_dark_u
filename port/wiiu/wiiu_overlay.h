@@ -2,7 +2,7 @@
 #define _IN_WIIU_OVERLAY_H
 
 // The debug overlay: frame rate, frame timing and renderer numbers, drawn in
-// the top left corner over the game. Hold ZL and press Minus to show or hide it.
+// the top left corner over the game. Press Minus to show or hide it.
 
 #include <stdint.h>
 #include <coreinit/time.h>

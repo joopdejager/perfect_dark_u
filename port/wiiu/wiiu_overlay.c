@@ -126,7 +126,7 @@ static void overlayDraw(void)
 		(unsigned)st.draws, (unsigned)st.triangles, (unsigned)(st.vertex_bytes / 1024));
 	snprintf(lines[n++], sizeof(lines[0]), "shaders %u  free mem %u MB",
 		(unsigned)st.shaders, (unsigned)(freeMem / (1024 * 1024)));
-	snprintf(lines[n++], sizeof(lines[0]), "ZL + Minus: hide");
+	snprintf(lines[n++], sizeof(lines[0]), "Minus: hide");
 
 	size_t widest = 0;
 	for (int i = 0; i < n; i++) {

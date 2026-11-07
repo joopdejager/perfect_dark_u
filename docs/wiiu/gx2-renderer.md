@@ -94,7 +94,7 @@ internally, so the back end switches back to its context after those too.
 
 ## The debug overlay
 
-The overlay (ZL + Minus, see [wiiu-build.md](wiiu-build.md)) is drawn by the
+The overlay (Minus, see [wiiu-build.md](wiiu-build.md)) is drawn by the
 same back end, after the game's frame and before it's copied to the screens.
 It uses one fixed shader: texture colour times vertex colour, made by the
 same generator from a hand-written combiner setup. Its text uses the 8×8 font

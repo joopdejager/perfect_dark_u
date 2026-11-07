@@ -90,7 +90,7 @@ Current phase: **4, GX2 renderer.** Done so far:
 - Phase 1: the Linux build ([linux-build.md](linux-build.md)).
 - Phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
 - Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
-- Phase 4, stage 1: a GX2 back end that draws the game, tested on a Wii U ([gx2-renderer.md](gx2-renderer.md)). Also a debug overlay (ZL + Minus).
+- Phase 4, stage 1: a GX2 back end that draws the game, tested on a Wii U ([gx2-renderer.md](gx2-renderer.md)). Also a debug overlay (Minus).
 
 ## Keeping up with the PC port
 
