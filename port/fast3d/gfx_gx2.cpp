@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <map>
 #include <utility>
+#include <vector>
 
 #include <coreinit/memory.h>
 #include <gx2/clear.h>
@@ -771,14 +772,22 @@ static void gfx_gx2_end_frame(void) {
 static void gfx_gx2_finish_render(void) {
 }
 
+// Framebuffer ids are small numbers, an index into this list, with 0 for the
+// main framebuffer. They can't be pointers (as texture ids are): the game's
+// copy command (G_COPYFB_EXT) packs two ids into 11 bits each.
+static std::vector<struct Framebuffer*> framebuffers = { &main_framebuffer };
+
 static int gfx_gx2_create_framebuffer(void) {
     struct Framebuffer* fb = (struct Framebuffer*)calloc(1, sizeof(struct Framebuffer));
-    // the id is the pointer; 0 means the main framebuffer
-    return (int)(uintptr_t)fb;
+    framebuffers.push_back(fb);
+    return (int)framebuffers.size() - 1;
 }
 
 static struct Framebuffer* fb_from_id(int fb_id) {
-    return fb_id == 0 ? &main_framebuffer : (struct Framebuffer*)(uintptr_t)fb_id;
+    if (fb_id < 0 || fb_id >= (int)framebuffers.size()) {
+        return nullptr;
+    }
+    return framebuffers[fb_id];
 }
 
 static void gfx_gx2_update_framebuffer_parameters(int fb_id, uint32_t width, uint32_t height, uint32_t msaa_level,
