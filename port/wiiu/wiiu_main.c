@@ -16,6 +16,8 @@
 #include <coreinit/fiber.h>
 #include <coreinit/debug.h>
 
+#include "wiiu.h"
+
 #define GAME_STACK_SIZE (8 * 1024 * 1024)
 
 int pdMain(int argc, const char **argv);
@@ -23,6 +25,13 @@ int pdMain(int argc, const char **argv);
 static int mainArgc;
 static const char **mainArgv;
 static int mainResult;
+static uint8_t *gameStack;
+
+void wiiuGetGameStack(uintptr_t *lo, uintptr_t *hi)
+{
+	*lo = (uintptr_t)gameStack;
+	*hi = (uintptr_t)gameStack + GAME_STACK_SIZE;
+}
 
 static void gameEntry(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
@@ -35,6 +44,7 @@ int main(int argc, char **argv)
 	mainArgv = (const char **)argv;
 
 	uint8_t *stack = memalign(64, GAME_STACK_SIZE);
+	gameStack = stack;
 	if (!stack) {
 		OSFatal("Perfect Dark: could not allocate the game's stack.");
 	}

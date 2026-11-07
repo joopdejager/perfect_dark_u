@@ -33,6 +33,8 @@ void wiiuInit(void)
 
 	// runs after the game's own exit handler, which saves settings
 	atexit(wiiuShutdown);
+
+	wiiuWatchdogInit();
 }
 
 static int isButtonEvent(const SDL_Event *ev)
@@ -62,6 +64,8 @@ void wiiuShowFatalError(const char *msg)
 	const Uint32 acceptAfter = SDL_GetTicks() + 1000;
 
 	for (;;) {
+		wiiuWatchdogBeat(); // waiting for a button isn't a freeze
+
 		SDL_Event ev;
 		while (SDL_PollEvent(&ev)) {
 			if (ev.type == SDL_QUIT) {
@@ -82,7 +86,7 @@ void wiiuShowFatalError(const char *msg)
 		y += 24;
 		y = wiiuScreenText(48, y, 2, 0xc0c0c0,
 			"ROM goes here on the SD card:\n  " WIIU_DATA_DIR_DISPLAY "/\n"
-			"Settings and saves:\n  " WIIU_APP_DIR_DISPLAY "/");
+			"Settings, saves and pd.log:\n  " WIIU_APP_DIR_DISPLAY "/");
 		y += 24;
 		wiiuScreenText(48, y, 2, 0xffd060, "Press any button to return to the Wii U Menu.");
 		y += 40;

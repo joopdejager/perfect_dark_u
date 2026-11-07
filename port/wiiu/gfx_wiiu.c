@@ -140,6 +140,7 @@ static void wiiu_draw_status(void)
 
 static void wiiu_swap_buffers_begin(void)
 {
+	wiiuWatchdogBeat();
 	if (++frameCount == 1) {
 		wiiuScreenBootDone();
 		sysLogPrintf(LOG_NOTE, "wiiu: first frame");

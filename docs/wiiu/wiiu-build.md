@@ -79,6 +79,35 @@ the game's real `main()`. It uses a "fiber" switch, which keeps the same thread
 and CPU core, because SDL's video and the HOME menu handling must stay on the
 core the app started on.
 
+## Crashes and freezes
+
+A crash or a hang used to leave the console stuck until it was switched off.
+Now (`port/wiiu/wiiu_watchdog.c`):
+
+- **A crash** (the game touching memory it shouldn't, or running a bad
+  instruction) shows the error page instead. The Wii U lets an app handle its
+  own crashes: we note where it happened and send the game thread to a
+  recovery function, which shows the page and exits normally.
+- **A freeze**: a small "watchdog" thread checks 10 times a second whether
+  the game is still making progress (drawing frames or logging). If it hasn't
+  for 2 seconds, pressing **HOME** on the GamePad stops the game and shows the
+  error page. Either way, pressing any button returns to the Wii U Menu.
+  After 10 seconds without progress, where the game is stuck also goes into
+  `pd.log`, even if the console is then switched off.
+
+The page and the log show code addresses: `PC` (the instruction it was on),
+`LR` and `Callers` (the functions that called it). The program that produced
+them turns those into function names and source lines. It needs the
+`build-wiiu/pd.ppc.elf` from the same build:
+
+```bash
+docker run --rm -v $PWD:/src devkitpro/devkitppc sh -c '$DEVKITPRO/devkitPPC/bin/powerpc-eabi-addr2line -f -C -e /src/build-wiiu/pd.ppc.elf 0x0218fdfc'
+```
+
+If `pdMain is at` on the page differs from `pdMain`'s address in the `.elf`
+(`powerpc-eabi-nm`), the code was loaded elsewhere and the addresses need
+shifting by the difference first.
+
 ## How the pieces fit
 
 | Piece | What it is |

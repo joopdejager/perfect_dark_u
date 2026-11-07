@@ -3,6 +3,8 @@
 
 // Wii U platform layer. Only built for the Wii U (see CMakeLists.txt).
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,6 +25,14 @@ unsigned long long wiiuGetMicroseconds(void);
 // Called once at startup from sysInit(): creates the folders above so the
 // user only has to copy the ROM in.
 void wiiuInit(void);
+
+// The bounds of the game's stack (see wiiu_main.c).
+void wiiuGetGameStack(uintptr_t *lo, uintptr_t *hi);
+
+// Crash and freeze recovery (see wiiu_watchdog.c). Init is called from
+// wiiuInit(); Beat is called whenever the game makes progress.
+void wiiuWatchdogInit(void);
+void wiiuWatchdogBeat(void);
 
 // Shows an error message on the TV and GamePad and waits until the user
 // presses a button or leaves through the HOME menu. Called by sysFatalError().

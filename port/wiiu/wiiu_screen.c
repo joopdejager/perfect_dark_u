@@ -3,6 +3,7 @@
 #include <SDL.h>
 #include <coreinit/thread.h>
 
+#include "wiiu.h"
 #include "wiiu_screen.h"
 
 // Public domain 8x8 font. In each byte the lowest bit is the leftmost pixel.
@@ -169,6 +170,8 @@ void wiiuScreenBootDone(void)
 
 void wiiuScreenAddLogLine(const char *prefix, const char *msg)
 {
+	wiiuWatchdogBeat();
+
 	// split multi-line messages so each line is stored separately
 	const char *start = msg;
 	while (start) {
