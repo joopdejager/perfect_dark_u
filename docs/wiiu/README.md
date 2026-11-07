@@ -47,13 +47,14 @@ second back end that turns them into GX2 calls, GX2 being the Wii U's graphics A
 | `docs/wiiu/` | This documentation |
 | `tools/wiiu/` | Build and test scripts |
 
-`gfx_gx2.cpp` is still a placeholder; phase 4 fills it in.
+`gfx_gx2.cpp` is being filled in during phase 4.
 
 Notes so far:
 
 - [linux-build.md](linux-build.md): building and running the PC version.
 - [big-endian.md](big-endian.md): making the port work on big-endian CPUs, tested under QEMU.
 - [wiiu-build.md](wiiu-build.md): building, installing and running the Wii U app.
+- [gx2-renderer.md](gx2-renderer.md): how the game is drawn on the Wii U.
 
 ## Why this route
 
@@ -89,6 +90,7 @@ Current phase: **4, GX2 renderer.** Done so far:
 - Phase 1: the Linux build ([linux-build.md](linux-build.md)).
 - Phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
 - Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
+- Phase 4, stage 1: a GX2 back end that draws the game, waiting for its first hardware test ([gx2-renderer.md](gx2-renderer.md)).
 
 ## Keeping up with the PC port
 
@@ -114,7 +116,9 @@ checks, so these merges stay easy.
 - Decompilation and PC port: MIT (`LICENSE`).
 - Fast3D renderer: MIT (`port/fast3d/LICENSE.txt`).
 - Anything added under `third_party/` keeps its own licence, recorded next to it.
-  So far: `font8x8` (public domain), used for the Wii U's text pages.
+  So far: `font8x8` (public domain), used for the Wii U's text pages, and
+  `libultraship` (MIT), the GX2 shader generator. `port/fast3d/gfx_gx2.cpp`
+  is also based on libultraship's GX2 back end and says so at the top.
   Code under GPL, such as GLideN64 or Our64's own code, isn't copied in, because
   it would make the whole port GPL. Reading it for reference is fine.
 

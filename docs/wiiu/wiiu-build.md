@@ -1,9 +1,9 @@
 # Wii U build (phase 3)
 
 This note covers building the game as a Wii U app, installing it, and what the
-pieces are. At this stage the app starts, finds its files on the SD card and
-runs the game, but it can't draw the game yet. That needs the GX2 renderer,
-which is phase 4. Until then it shows a text page instead.
+pieces are. Phase 3 got the app to start, find its files on the SD card and
+run the game without drawing it. Drawing came in phase 4, see
+[gx2-renderer.md](gx2-renderer.md).
 
 ## Building
 
@@ -55,10 +55,9 @@ so the ROM goes in `sdcard/wiiu/apps/perfectdark/data/` there.
 
 - **Without the ROM:** an error page saying the ROM file couldn't be opened,
   with where it should go. Press any button to return to the Wii U Menu.
-- **With the ROM:** a status page saying the game is running, with a frame
-  counter and the game's recent log messages. The game itself is running behind
-  it: loading the ROM, starting the title screen and running its main loop.
-  It just has nothing to draw with yet. Press HOME to quit.
+- **With the ROM:** the startup page while the ROM loads, then the game
+  itself, drawn by the GX2 renderer (phase 4). Press HOME for the HOME menu.
+  (Phase 3 builds showed a status page with a frame counter instead.)
 
 Any other startup problem shows the same error page with its message, so
 problems can be read off the screen without a PC attached.
@@ -134,12 +133,10 @@ that owns the window and its events, and a *rendering back end*
 (`gfx_opengl.cpp`) that turns draw calls into OpenGL. The Wii U has no OpenGL,
 so both are swapped out:
 
-- **`port/wiiu/gfx_wiiu.c`**, the Wii U window manager. For now it uses
-  SDL's own small 2D renderer, which runs on GX2, to show the status page.
-  Phase 4 replaces it with a screen set up for the real renderer.
-- **`port/fast3d/gfx_gx2.cpp`**, the GX2 rendering back end. For now it's a
-  placeholder that accepts every call and draws nothing, so the rest of the
-  game runs normally around it. Phase 4 fills it in.
+- **`port/wiiu/gfx_wiiu.c`**, the Wii U window manager. SDL sets up the
+  screen; this paces frames and shows them.
+- **`port/fast3d/gfx_gx2.cpp`**, the GX2 rendering back end, which draws the
+  game. In phase 3 it was a placeholder that drew nothing.
 
 ## Changes made
 

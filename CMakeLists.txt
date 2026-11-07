@@ -291,6 +291,9 @@ if(NINTENDO_WIIU)
   # window code. port/wiiu and port/fast3d/gfx_gx2.cpp replace them.
   list(FILTER SRC_PORT EXCLUDE REGEX "/port/fast3d/glad/")
   list(FILTER SRC_PORT_CXX EXCLUDE REGEX "/port/fast3d/(gfx_opengl|gfx_sdl2)\\.cpp$")
+  # GX2 shader generator used by gfx_gx2.cpp (MIT, from libultraship)
+  file(GLOB SRC_GX2_SHADER_GEN "${CMAKE_SOURCE_DIR}/third_party/libultraship/*.c")
+  list(APPEND SRC_PORT ${SRC_GX2_SHADER_GEN})
 else()
   # Wii U-only code
   list(FILTER SRC_PORT EXCLUDE REGEX "/port/wiiu/")
