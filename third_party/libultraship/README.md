@@ -34,3 +34,9 @@ combiner description Fast3D produces).
 - `SHADER_TEXINFO0` starts after this port's last combiner input
   (`SHADER_LOD_FRAC`) rather than `SHADER_NOISE`.
 - Include path of `gfx_cc.h`; added the `assert.h` and `string.h` includes.
+- Bug fix: texture colour registers no longer use R1 or R2, where the
+  texture coordinates arrive. Upstream could put texture 1 in R2, so when
+  both textures were clamped, asking texture 1 for its size overwrote its own
+  coordinates. With noise, texture 0 could land in R2 the same way. Found
+  through Perfect Dark's HUD text, which uses two clamped textures and came
+  out illegible.

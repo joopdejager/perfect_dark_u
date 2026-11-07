@@ -39,11 +39,13 @@ struct RegTable {
     uint8_t regs[128];
 };
 
-static inline int reg_table_find_free(struct RegTable* tbl, bool reuse_texinfo) {
+static inline int reg_table_find_free(struct RegTable* tbl, bool skip_texcoords) {
     for (int i = 0; i < 128; i++) {
-        // this is to make sure that things like mask and blend don't overwrite
-        // texinfo while sampling which is needed for later textures
-        if (reuse_texinfo && (i == 1 || i == 2)) {
+        // R1 and R2 arrive holding the texture coordinates (and clamp limits)
+        // of textures 0 and 1. A texture's colour (and, with clamping, its
+        // size first) is written into its own register before the other
+        // texture has read its coordinates, so it must not be R1 or R2.
+        if (skip_texcoords && (i == 1 || i == 2)) {
             continue;
         }
 
@@ -81,14 +83,17 @@ static void reg_table_build(struct RegTable* tbl, struct CCFeatures *cc_features
     }
 
     // for the rest of regs we find unused ones
+    // (Perfect Dark port: textures skip R1/R2 too. Upstream only did that for
+    // mask and blend textures, so with two clamped textures, or noise, the
+    // first texture's register could be R2 and wipe texture 1's coordinates.)
     if (cc_features->used_textures[0]) {
-        int reg = reg_table_find_free(tbl, false);
+        int reg = reg_table_find_free(tbl, true);
         assert(reg != -1);
         tbl->regs[reg] = SHADER_TEXEL0;
     }
 
     if (cc_features->used_textures[1]) {
-        int reg = reg_table_find_free(tbl, false);
+        int reg = reg_table_find_free(tbl, true);
         assert(reg != -1);
         tbl->regs[reg] = SHADER_TEXEL1;
     }

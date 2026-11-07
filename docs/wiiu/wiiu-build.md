@@ -183,6 +183,7 @@ shifting by the difference first.
 | Stuck on the splash screen, power-off needed | Not known at the time; there was no way to see where it stopped | Startup log on screen and in `pd.log`; 8 MB game stack; crash and freeze recovery (above) |
 | "The game crashed (bad memory access)", address `00000008`, in `sysSleep()` the first time the game waited for its next frame | wut's `nanosleep()` writes the "time remaining" result into its second argument without checking for NULL, which the PC code passes. Linux's C library checks, so QEMU didn't show it. | On the Wii U, `sysSleep()` uses the console's own `OSSleepTicks()` |
 | Crash as soon as CamSpy was selected, address `0000066c`, in `gfx_gx2_copy_framebuffer` | Framebuffer ids were memory addresses, but the game's framebuffer copy command packs two ids into 11 bits each, so they arrived cut short | Ids are small numbers (an index), like the OpenGL back end's |
+| HUD text (bottom of the screen, ammo counter) illegible | A bug in the borrowed shader generator: with two clamped textures, asking texture 1 for its size overwrote its own coordinates, because both used register R2 | Texture registers skip R1 and R2 (`third_party/libultraship/README.md`) |
 
 The crash was found by the crash page: the `PC` and `Callers` addresses,
 shifted by the difference in `pdMain`'s address and run through `addr2line`,
