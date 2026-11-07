@@ -633,7 +633,7 @@ void menuCalculateItemSize(struct menuitem *item, s16 *width, s16 *height, struc
 		break;
 	case MENUITEMTYPE_KEYBOARD:
 		*width = 130;
-#ifndef PLATFORM_N64
+#if !defined(PLATFORM_N64) && !defined(PLATFORM_WIIU) // no "type with keyboard" row on the Wii U (menuitem.c)
 		*height = 84;
 #else
 		*height = 73;
