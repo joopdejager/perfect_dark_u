@@ -84,7 +84,11 @@ Notes so far:
 | 5. Input and audio | GamePad, Pro Controller, Wii Remotes; audio output | Playable start to finish |
 | 6. Speed | Profiling, using all 3 CPU cores, faster vertex maths | Smooth in single player, then multiplayer |
 
-Current phase: **3, Wii U build.** Phase 1 is done ([linux-build.md](linux-build.md)), and so is phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)). Phase 3 has an installable `.wuhb` that starts, finds the ROM on the SD card and runs the game without drawing it ([wiiu-build.md](wiiu-build.md)). It still needs a test on a real Wii U.
+Current phase: **4, GX2 renderer.** Done so far:
+
+- Phase 1: the Linux build ([linux-build.md](linux-build.md)).
+- Phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
+- Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
 
 ## Keeping up with the PC port
 

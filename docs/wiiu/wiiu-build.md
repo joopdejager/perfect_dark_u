@@ -159,12 +159,16 @@ so both are swapped out:
 Each change to a shared file is behind `PLATFORM_WIIU` or `NINTENDO_WIIU`,
 and the PC build compiles exactly the files it did before.
 
-## Not tested yet
+## Status
 
-These builds haven't run on a Wii U or in Cemu yet. The cloud sessions that
-build them can't run either. Things to watch for on the first run:
+Tested on a Wii U with Aroma (build `ae26f494b`):
 
-- **Controllers and audio.** SDL should handle both, but neither has been
-  tried. Phase 5 covers them properly.
-- **Saving.** `pd.ini` and save files should appear in
-  `sd:/wiiu/apps/perfectdark/`.
+- The app installs, starts, finds the ROM on the SD card and loads it.
+- The game runs: the status page's frame counter climbs.
+- **Audio plays**, through SDL's Wii U audio, with no Wii U-specific code.
+- The GamePad is detected as a controller.
+- A missing ROM, a crash or a freeze each lead to the error page and a clean
+  exit to the Wii U Menu.
+
+Not checked yet: controller input in the game (hard to judge without a
+picture; phase 5), and whether saves land in `sd:/wiiu/apps/perfectdark/`.
