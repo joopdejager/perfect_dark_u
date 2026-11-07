@@ -92,6 +92,17 @@ Current phase: **4, GX2 renderer.** Done so far:
 - Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
 - Phase 4, stage 1: a GX2 back end that draws the game, tested on a Wii U ([gx2-renderer.md](gx2-renderer.md)). Also a debug overlay (Minus).
 
+## Open issues from testing
+
+Found on the console, parked until their phase:
+
+| Issue | Notes | Phase |
+|---|---|---|
+| 60 FPS drops to 30 in combat with several enemies | The game waits for the screen's refresh, so a frame that misses 16.7 ms waits for the next one: 60 falls straight to 30. The overlay's "CPU busy" and "GPU wait" in such a scene will show which side is too slow. | 6 |
+| Controls differ from the N64 | The default is the PC port's two-stick style (see [wiiu-build.md](wiiu-build.md), Controls). Which N64 behaviour to bring back is still to be decided. | 5 |
+| Looking around is too sensitive | The PC port maps a full stick push to ±127; a real N64 stick only reaches about ±80, and the game's turn speed was tuned for that. Options → Extended → Controller → RStick Scale X/Y adjusts it; once a good value is found it can become the Wii U default. | 5 |
+| Tint was off under QEMU | Seen only in phase 2's emulator test, not on the console. | - |
+
 ## Keeping up with the PC port
 
 The PC port is still developed. To pull in its fixes:
