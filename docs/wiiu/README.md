@@ -98,7 +98,8 @@ Found on the console, parked until their phase:
 
 | Issue | Notes | Phase |
 |---|---|---|
-| 60 FPS drops to 30 in combat with several enemies | The game waits for the screen's refresh, so a frame that misses 16.7 ms waits for the next one: 60 falls straight to 30. The overlay's "CPU busy" and "GPU wait" in such a scene will show which side is too slow. | 6 |
+| 60 FPS drops to 30 in some scenes | The game waits for the screen's refresh, so a frame that misses 16.7 ms waits for the next one: 60 falls straight to 30. In a level 2 room with a light in view: CPU busy 11 ms, GPU wait 23 ms, so the GPU was too slow. The screen buffers moved to MEM1 for that ([gx2-renderer.md](gx2-renderer.md), Memory); to be retested. | 4, 6 |
+| CamSpy showed nothing | Its lens redraws a copy of the screen, and framebuffer copies weren't written yet. Now they are; to be retested. | 4 |
 | Controls differ from the N64 | The default is the PC port's two-stick style (see [wiiu-build.md](wiiu-build.md), Controls). Which N64 behaviour to bring back is still to be decided. | 5 |
 | Looking around is too sensitive | The PC port maps a full stick push to ±127; a real N64 stick only reaches about ±80, and the game's turn speed was tuned for that. Options → Extended → Controller → RStick Scale X/Y adjusts it; once a good value is found it can become the Wii U default. | 5 |
 | The TV lags behind the GamePad | Each frame goes to both screens' buffers at the same moment and both swap together, so the app shows them at the same time. The difference is most likely the TV's own picture processing (try its Game mode) or upscaling 720p to 1080p. To check: compare with a retail Wii U game on the same TV. | - |

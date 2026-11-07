@@ -14,9 +14,8 @@
 // third_party/libultraship/gx2_shader_gen.c, one per colour-combiner setup,
 // so no shader compiler is needed.
 //
-// Not done yet (later stages of phase 4, see docs/wiiu/gx2-renderer.md):
-// copying between framebuffers, the blur filter, three-point filtering and
-// mipmaps. They fall back to something simpler or do nothing.
+// Not done yet (see docs/wiiu/gx2-renderer.md): the blur filter,
+// three-point filtering and mipmaps. They fall back to something simpler.
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -39,6 +38,8 @@
 #include <gx2/swap.h>
 #include <gx2/texture.h>
 #include <gx2/utils.h>
+#include <gx2r/surface.h>
+#include <proc_ui/procui.h>
 
 #ifndef _LANGUAGE_C
 #define _LANGUAGE_C
@@ -80,6 +81,9 @@ struct Framebuffer {
     GX2ColorBuffer color_buffer;
     GX2DepthBuffer depth_buffer;
     bool has_depth;
+    // made through GX2R, which SDL's allocator puts in MEM1 (see gfx_gx2_alloc_framebuffer)
+    bool color_gx2r;
+    bool depth_gx2r;
     // the same memory as color_buffer, for drawing this buffer as a texture
     struct Texture tex;
 };
@@ -126,6 +130,9 @@ static int last_scissor[4] = { 0, 0, 1, 1 };
 static GfxGx2OverlayFn overlay_fn;
 static struct ShaderProgram overlay_prg;
 static bool overlay_prg_ready;
+
+// a rectangle covering the whole target, for scaled framebuffer copies
+static float* blit_vbo;
 
 static const char* gfx_gx2_get_name(void) {
     return "GX2";
@@ -463,16 +470,56 @@ static void gfx_gx2_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t b
     stat_tris += buf_vbo_num_tris;
 }
 
-// Sets up `fb`'s colour buffer, and its depth buffer if asked, at the given size.
-static bool gfx_gx2_alloc_framebuffer(struct Framebuffer* fb, uint32_t width, uint32_t height, bool has_depth) {
-    if (fb->color_buffer.surface.image) {
+static void gfx_gx2_free_framebuffer(struct Framebuffer* fb) {
+    if (fb->color_buffer.surface.image || fb->depth_buffer.surface.image) {
+        // the GPU may still be drawing into it
         GX2DrawDone();
-        free(fb->color_buffer.surface.image);
+    }
+    if (fb->color_buffer.surface.image) {
+        if (fb->color_gx2r) {
+            GX2RDestroySurfaceEx(&fb->color_buffer.surface, (GX2RResourceFlags)0);
+        } else {
+            free(fb->color_buffer.surface.image);
+        }
     }
     if (fb->depth_buffer.surface.image) {
-        free(fb->depth_buffer.surface.image);
+        if (fb->depth_gx2r) {
+            GX2RDestroySurfaceEx(&fb->depth_buffer.surface, (GX2RResourceFlags)0);
+        } else {
+            free(fb->depth_buffer.surface.image);
+        }
     }
     memset(fb, 0, sizeof(*fb));
+}
+
+// Gives `surface` memory: in MEM1 if `fast` and there's room, otherwise MEM2.
+// Returns false if there's no memory at all; sets *gx2r if it went through GX2R.
+static bool gfx_gx2_alloc_surface(GX2Surface* surface, bool fast, GX2RResourceFlags gx2r_flags, bool* gx2r) {
+    GX2CalcSurfaceSizeAndAlignment(surface);
+    *gx2r = false;
+
+    // MEM1 is the Wii U's 32 MB of fast memory next to the GPU, and drawing
+    // into it is much quicker than into MEM2, the main memory. SDL claims
+    // all of MEM1, but it also installs itself as GX2R's allocator and puts
+    // GX2R colour and depth buffers there, so that's the way in.
+    if (fast && GX2RCreateSurface(surface, gx2r_flags)) {
+        *gx2r = true;
+        return true;
+    }
+
+    surface->image = memalign(surface->alignment, surface->imageSize);
+    if (!surface->image) {
+        return false;
+    }
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU, surface->image, surface->imageSize);
+    return true;
+}
+
+// Sets up `fb`'s colour buffer, and its depth buffer if asked, at the given
+// size, in MEM1 if `fast` (only the main framebuffer, drawn every frame).
+static bool gfx_gx2_alloc_framebuffer(struct Framebuffer* fb, uint32_t width, uint32_t height, bool has_depth,
+                                      bool fast) {
+    gfx_gx2_free_framebuffer(fb);
 
     GX2ColorBuffer* cb = &fb->color_buffer;
     cb->surface.use = GX2_SURFACE_USE_TEXTURE_COLOR_BUFFER_TV;
@@ -485,17 +532,13 @@ static bool gfx_gx2_alloc_framebuffer(struct Framebuffer* fb, uint32_t width, ui
     cb->surface.aa = GX2_AA_MODE1X;
     cb->surface.tileMode = GX2_TILE_MODE_DEFAULT;
     cb->viewNumSlices = 1;
-    GX2CalcSurfaceSizeAndAlignment(&cb->surface);
-    GX2InitColorBufferRegs(cb);
-
-    // For now everything lives in MEM2, the Wii U's main memory. MEM1, the
-    // small fast memory next to the GPU, belongs to SDL here; moving the
-    // framebuffers there is a phase 6 (speed) job.
-    cb->surface.image = memalign(cb->surface.alignment, cb->surface.imageSize);
-    if (!cb->surface.image) {
+    if (!gfx_gx2_alloc_surface(&cb->surface, fast,
+                               (GX2RResourceFlags)(GX2R_RESOURCE_BIND_COLOR_BUFFER | GX2R_RESOURCE_BIND_TEXTURE |
+                                                   GX2R_RESOURCE_USAGE_GPU_READ | GX2R_RESOURCE_USAGE_GPU_WRITE),
+                               &fb->color_gx2r)) {
         return false;
     }
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU, cb->surface.image, cb->surface.imageSize);
+    GX2InitColorBufferRegs(cb);
 
     if (has_depth) {
         GX2DepthBuffer* db = &fb->depth_buffer;
@@ -510,14 +553,13 @@ static bool gfx_gx2_alloc_framebuffer(struct Framebuffer* fb, uint32_t width, ui
         db->surface.tileMode = GX2_TILE_MODE_DEFAULT;
         db->viewNumSlices = 1;
         db->depthClear = 1.0f;
-        GX2CalcSurfaceSizeAndAlignment(&db->surface);
-        GX2InitDepthBufferRegs(db);
-
-        db->surface.image = memalign(db->surface.alignment, db->surface.imageSize);
-        if (!db->surface.image) {
+        if (!gfx_gx2_alloc_surface(&db->surface, fast,
+                                   (GX2RResourceFlags)(GX2R_RESOURCE_BIND_DEPTH_BUFFER | GX2R_RESOURCE_USAGE_GPU_READ |
+                                                       GX2R_RESOURCE_USAGE_GPU_WRITE),
+                                   &fb->depth_gx2r)) {
             return false;
         }
-        GX2Invalidate(GX2_INVALIDATE_MODE_CPU, db->surface.image, db->surface.imageSize);
+        GX2InitDepthBufferRegs(db);
         fb->has_depth = true;
     }
 
@@ -533,6 +575,26 @@ static bool gfx_gx2_alloc_framebuffer(struct Framebuffer* fb, uint32_t width, ui
     fb->tex.uploaded = true;
 
     return true;
+}
+
+// Opening the HOME menu takes MEM1 away: SDL frees its whole MEM1 heap,
+// including our buffers in it. Let go of them here; the next frame makes new
+// ones (gfx_pc.cpp sizes the main framebuffer at the start of every frame).
+static uint32_t gfx_gx2_on_release_foreground(void* arg) {
+    if (main_framebuffer.color_gx2r || main_framebuffer.depth_gx2r) {
+        gfx_gx2_free_framebuffer(&main_framebuffer);
+        sysLogPrintf(LOG_NOTE, "GX2: screen buffers released for the HOME menu");
+    }
+    return 0;
+}
+
+// Makes what the GPU has drawn into `fb` visible to texture reads: drawing
+// and texture sampling go through separate caches.
+static void gfx_gx2_flush_framebuffer(struct Framebuffer* fb) {
+    if (fb && fb->color_buffer.surface.image) {
+        GX2Invalidate((GX2InvalidateMode)(GX2_INVALIDATE_MODE_COLOR_BUFFER | GX2_INVALIDATE_MODE_TEXTURE),
+                      fb->color_buffer.surface.image, fb->color_buffer.surface.imageSize);
+    }
 }
 
 static void gfx_gx2_init(void) {
@@ -558,6 +620,8 @@ static void gfx_gx2_init(void) {
     gfx_gx2_set_depth_mode(true, true, true, false, ZMODE_OPA);
     gfx_gx2_set_use_alpha(false, false);
 
+    ProcUIRegisterCallback(PROCUI_CALLBACK_RELEASE, gfx_gx2_on_release_foreground, nullptr, 200);
+
     sysLogPrintf(LOG_NOTE, "GX2: renderer ready");
 }
 
@@ -576,47 +640,55 @@ static void gfx_gx2_start_frame(void) {
     frame_count++;
 }
 
-// Draws the overlay over the finished picture, then restores Fast3D's settings.
-static void gfx_gx2_draw_overlay(void) {
+// The fixed shader for the overlay and for scaled copies: texture colour
+// times vertex colour, with alpha (combiner slots TEXEL0, 0, INPUT_1, 0 for
+// both colour and alpha). Vertices: position (4 floats), texture coordinate
+// (2), colour (4).
+static bool gfx_gx2_ensure_2d_shader(void) {
     if (!overlay_prg_ready) {
-        // one fixed combiner setup: texture colour times vertex colour, with alpha
-        // (combiner slots: TEXEL0, 0, INPUT_1, 0 for colour and for alpha)
         struct CCFeatures cc;
         const uint64_t id0 = 0x0108 | (0x0108ull << 16);
         gfx_cc_get_features(id0, SHADER_OPT_ALPHA, &cc);
         if (gx2GenerateShaderGroup(&overlay_prg.group, &cc) != 0) {
-            overlay_fn = nullptr;
-            return;
+            return false;
         }
         overlay_prg.num_inputs = cc.num_inputs;
         overlay_prg.used_textures[0] = true;
         overlay_prg_ready = true;
     }
+    return true;
+}
 
-    GX2SetColorBuffer(&main_framebuffer.color_buffer, GX2_RENDER_TARGET_0);
-    GX2SetDepthBuffer(&main_framebuffer.depth_buffer);
-    GX2SetViewport(0.0f, 0.0f, main_framebuffer.color_buffer.surface.width,
-                   main_framebuffer.color_buffer.surface.height, 0.0f, 1.0f);
-    GX2SetScissor(0, 0, main_framebuffer.color_buffer.surface.width, main_framebuffer.color_buffer.surface.height);
+// Sets the GPU up for 2D drawing over the whole of `fb`, with or without blending.
+static void gfx_gx2_begin_2d(struct Framebuffer* fb, bool blend) {
+    const uint32_t w = fb->color_buffer.surface.width;
+    const uint32_t h = fb->color_buffer.surface.height;
+    GX2SetColorBuffer(&fb->color_buffer, GX2_RENDER_TARGET_0);
+    if (fb->has_depth) {
+        GX2SetDepthBuffer(&fb->depth_buffer);
+    }
+    GX2SetViewport(0.0f, 0.0f, w, h, 0.0f, 1.0f);
+    GX2SetScissor(0, 0, w, h);
     GX2SetDepthOnlyControl(FALSE, FALSE, GX2_COMPARE_FUNC_ALWAYS);
     GX2SetPolygonOffset(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     GX2SetPolygonControl(GX2_FRONT_FACE_CCW, FALSE, FALSE, FALSE, GX2_POLYGON_MODE_TRIANGLE,
                          GX2_POLYGON_MODE_TRIANGLE, FALSE, FALSE, FALSE);
-    GX2SetColorControl(GX2_LOGIC_OP_COPY, 0xff, FALSE, TRUE);
+    GX2SetColorControl(GX2_LOGIC_OP_COPY, blend ? 0xff : 0x00, FALSE, TRUE);
     GX2SetBlendControl(GX2_RENDER_TARGET_0, GX2_BLEND_MODE_SRC_ALPHA, GX2_BLEND_MODE_INV_SRC_ALPHA,
                        GX2_BLEND_COMBINE_MODE_ADD, FALSE, GX2_BLEND_MODE_ZERO, GX2_BLEND_MODE_ZERO,
                        GX2_BLEND_COMBINE_MODE_ADD);
     GX2SetFetchShader(&overlay_prg.group.fetchShader);
     GX2SetVertexShader(&overlay_prg.group.vertexShader);
     GX2SetPixelShader(&overlay_prg.group.pixelShader);
+}
 
-    overlay_fn();
-
-    // put back what Fast3D last set
+// Puts back the settings Fast3D last made. Fast3D only sends changes, so
+// anything else that changes GPU settings has to undo it.
+static void gfx_gx2_end_2d(void) {
     gfx_gx2_set_depth_mode(last_depth.test, last_depth.update, last_depth.compare, last_depth.source_prim,
                            last_depth.zmode);
     gfx_gx2_set_use_alpha(last_use_alpha, last_modulate);
-    if (current_framebuffer) {
+    if (current_framebuffer && current_framebuffer->color_buffer.surface.image) {
         GX2SetColorBuffer(&current_framebuffer->color_buffer, GX2_RENDER_TARGET_0);
         if (current_framebuffer->has_depth) {
             GX2SetDepthBuffer(&current_framebuffer->depth_buffer);
@@ -627,6 +699,49 @@ static void gfx_gx2_draw_overlay(void) {
     if (current_shader_program) {
         gfx_gx2_load_shader(current_shader_program);
     }
+}
+
+// Draws the overlay over the finished picture.
+static void gfx_gx2_draw_overlay(void) {
+    if (!gfx_gx2_ensure_2d_shader()) {
+        overlay_fn = nullptr;
+        return;
+    }
+    gfx_gx2_begin_2d(&main_framebuffer, true);
+    overlay_fn();
+    gfx_gx2_end_2d();
+}
+
+// Draws all of `src` stretched over all of `dst`, smoothing as it scales.
+static void gfx_gx2_blit(struct Framebuffer* src, struct Framebuffer* dst) {
+    if (!gfx_gx2_ensure_2d_shader()) {
+        return;
+    }
+
+    if (!blit_vbo) {
+        // two triangles over the whole target; the texture's top row at the top
+        static const float quad[6][10] = {
+            { -1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+            { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+            { -1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+            { 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+            { -1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+        };
+        blit_vbo = (float*)memalign(GX2_VERTEX_BUFFER_ALIGNMENT, sizeof(quad));
+        if (!blit_vbo) {
+            return;
+        }
+        memcpy(blit_vbo, quad, sizeof(quad));
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, blit_vbo, sizeof(quad));
+    }
+
+    gfx_gx2_begin_2d(dst, false);
+    GX2SetPixelTexture(&src->tex.texture, 0);
+    GX2SetPixelSampler(&src->tex.sampler, 0);
+    GX2SetAttribBuffer(0, 6 * 10 * sizeof(float), overlay_prg.group.stride, blit_vbo);
+    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 6, 0, 1);
+    gfx_gx2_end_2d();
 }
 
 static void gfx_gx2_end_frame(void) {
@@ -687,7 +802,7 @@ static void gfx_gx2_update_framebuffer_parameters(int fb_id, uint32_t width, uin
         return;
     }
 
-    if (!gfx_gx2_alloc_framebuffer(fb, width, height, has_depth_buffer)) {
+    if (!gfx_gx2_alloc_framebuffer(fb, width, height, has_depth_buffer, fb_id == 0)) {
         sysFatalError("Not enough memory for a %ux%u framebuffer.", (unsigned)width, (unsigned)height);
     }
 
@@ -696,6 +811,12 @@ static void gfx_gx2_update_framebuffer_parameters(int fb_id, uint32_t width, uin
         if (fb->has_depth) {
             GX2SetDepthBuffer(&fb->depth_buffer);
         }
+    }
+
+    if (fb_id == 0) {
+        // at startup, and again after each visit to the HOME menu
+        sysLogPrintf(LOG_NOTE, "GX2: %ux%u screen buffers made in %s", (unsigned)width, (unsigned)height,
+                     fb->color_gx2r && fb->depth_gx2r ? "MEM1 (fast)" : "MEM2 (MEM1 was full)");
     }
 }
 
@@ -709,6 +830,11 @@ static bool gfx_gx2_start_draw_to_framebuffer(int fb_id, float noise_scale) {
         current_noise_scale = 1.0f / noise_scale;
     }
 
+    if (current_framebuffer != fb) {
+        // what was drawn into the previous target may be used as a texture next
+        gfx_gx2_flush_framebuffer(current_framebuffer);
+    }
+
     GX2SetColorBuffer(&fb->color_buffer, GX2_RENDER_TARGET_0);
     if (fb->has_depth) {
         GX2SetDepthBuffer(&fb->depth_buffer);
@@ -717,9 +843,46 @@ static bool gfx_gx2_start_draw_to_framebuffer(int fb_id, float noise_scale) {
     return true;
 }
 
+// Copies (part of) one framebuffer into another. Effects that bend or blur
+// the picture use this: CamSpy and the night vision and IR scanner lenses
+// copy the whole screen and redraw it, shields and the cloak copy a small
+// square, and the menu and motion blur copy a shrunken screen.
 static void gfx_gx2_copy_framebuffer(int fb_dst, int fb_src, int left, int top, bool flip_y, bool use_back) {
-    // TODO (phase 4, stage 4): used by effects that read the screen back,
-    // such as the blurred menu backgrounds
+    struct Framebuffer* src = fb_from_id(fb_src);
+    struct Framebuffer* dst = fb_from_id(fb_dst);
+    if (!src || !dst || src == dst || !src->color_buffer.surface.image || !dst->color_buffer.surface.image) {
+        return;
+    }
+
+    const int32_t sw = src->color_buffer.surface.width, sh = src->color_buffer.surface.height;
+    const int32_t dw = dst->color_buffer.surface.width, dh = dst->color_buffer.surface.height;
+
+    gfx_gx2_flush_framebuffer(src);
+
+    if (left >= 0 && top >= 0) {
+        // Same-size copy of a rectangle starting at (left, top). gfx_pc.cpp
+        // turns `top` upside down for OpenGL when copying from the screen
+        // (flip_y); undo that, since GX2 counts rows from the top.
+        if (flip_y && left > 0 && top > 0) {
+            top = sh - 1 - top;
+        }
+        GX2Rect rect = { left, top, std::min(left + dw, sw), std::min(top + dh, sh) };
+        GX2Point point = { 0, 0 };
+        if (rect.right <= rect.left || rect.bottom <= rect.top) {
+            return;
+        }
+        // the GPU's copy engine: no drawing, no shader
+        GX2CopySurfaceEx(&src->color_buffer.surface, 0, 0, &dst->color_buffer.surface, 0, 0, 1, &rect, &point);
+        GX2SetContextState(context_state);
+    } else if (sw == dw && sh == dh) {
+        GX2CopySurface(&src->color_buffer.surface, 0, 0, &dst->color_buffer.surface, 0, 0);
+        GX2SetContextState(context_state);
+    } else {
+        // a different size: draw the source stretched over the destination
+        gfx_gx2_blit(src, dst);
+    }
+
+    gfx_gx2_flush_framebuffer(dst);
 }
 
 static void gfx_gx2_clear_framebuffer(bool clear_color, bool clear_depth) {
@@ -752,6 +915,7 @@ static void* gfx_gx2_get_framebuffer_texture_id(int fb_id) {
 static void gfx_gx2_select_texture_fb(int fb_id) {
     struct Framebuffer* fb = fb_from_id(fb_id);
     if (fb && fb->color_buffer.surface.image) {
+        gfx_gx2_flush_framebuffer(fb);
         bound_textures[0] = &fb->tex;
     }
 }

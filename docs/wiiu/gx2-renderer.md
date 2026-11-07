@@ -104,25 +104,63 @@ scissor, depth, blending and shader that Fast3D set.
 
 ## Memory
 
-Everything (framebuffers, textures, vertices) is in MEM2, the main memory.
-The Wii U also has 32 MB of fast MEM1 next to the GPU, where framebuffers
-draw faster, but SDL claims all of it for its own use. Moving our
-framebuffers there is a phase 6 (speed) job.
+The Wii U has two kinds of memory: about 1 GB of main memory (MEM2) and
+32 MB of fast memory next to the GPU (MEM1). Drawing a pixel means reading
+and writing its colour and depth, and with transparent effects, several
+times over. That goes much faster in MEM1, which is what the console's own
+games keep their screen buffers in.
+
+The first hardware tests had everything in MEM2. A room on level 2 with a
+light shining into the camera dropped to 30 FPS. The overlay showed the CPU
+busy for 11 ms and waiting 23 ms for the GPU, so the GPU was the slow side.
+
+SDL claims all of MEM1, but it also becomes GX2R's allocator (GX2R is
+GX2's resource helper) and puts any GX2R colour or depth buffer into MEM1.
+So the main colour and depth buffers are now made with GX2R, and land in
+MEM1. If MEM1 is full they fall back to MEM2, and `pd.log` says which
+happened (`GX2: 1280x720 screen buffers made in ...`).
+
+Opening the HOME menu takes MEM1 away: SDL frees its whole MEM1 heap. The
+back end gets told first (a ProcUI "release" callback), lets go of its
+buffers, and makes new ones on the next frame. Their contents don't matter,
+because each frame is drawn from scratch.
+
+Textures, vertices and the other framebuffers stay in MEM2.
+
+## Framebuffer copies
+
+Some effects copy the picture and draw it again, changed:
+
+| Effect | What it copies |
+|---|---|
+| CamSpy, night vision, IR scanner lenses | The whole screen, redrawn through the lens |
+| Shields, cloaking device | A 16×16 square behind the character |
+| Menu background blur, motion blur | The screen, shrunk |
+
+`copy_framebuffer` does same-size copies with the GPU's copy engine
+(`GX2CopySurface`, `GX2CopySurfaceEx`), which needs no shader. Shrinking
+copies draw the source over the destination with the overlay's shader.
+
+Drawing and texture reading go through separate GPU caches. So before a
+framebuffer is read as a texture, `GX2Invalidate` writes its pixels out of
+the drawing cache and clears stale ones from the texture cache.
+
+One catch from OpenGL: when copying a rectangle from the screen,
+`gfx_pc.cpp` turns its `top` upside down, because OpenGL counts rows from
+the bottom. The back end turns it back.
 
 ## Stages
 
 | Stage | What | Status |
 |---|---|---|
 | 1 | Set up our own drawing, shaders, textures, blending, depth, fog | Done: tested on a Wii U, the title, menus and a new game look right |
-| 2–3 | Check menus, text and 3D levels; fix what's wrong | After stage 1's test |
-| 4 | Effects that copy the screen: blurred menu backgrounds, night vision, sun flares (`copy_framebuffer`) | Not started |
+| 2–3 | Check menus, text and 3D levels; fix what's wrong | Ongoing, from play testing |
+| 4 | Effects that copy the screen (`copy_framebuffer`) | Written, waiting for a hardware test; the blur filter itself is still missing |
 
 Stage 1 covers more than first planned (untextured triangles only), because
 the libultraship code does textures, blending, depth and fog already. Not
 done yet:
 
-- **`copy_framebuffer`** does nothing, so effects that read the screen back
-  will look wrong or be missing (stage 4).
 - **The blur filter** (`SHADER_OPT_BLUR`, menu backgrounds) is drawn as a
   plain texture.
 - **Three-point filtering** (the N64's own texture filter, an option in the PC
@@ -140,6 +178,8 @@ done yet:
 Besides the startup lines, the renderer writes:
 
 - `GX2: renderer ready`: the back end started.
+- `GX2: 1280x720 screen buffers made in MEM1 (fast)`: at startup and after
+  each visit to the HOME menu. `MEM2` instead means MEM1 was full.
 - `GX2: shader N made for ...`: a new combiner setup was seen.
 - `GX2: frame N: D draws, T triangles, S skipped, K KB of vertices`: on the
   first frame and then every 600 frames (about 10–20 seconds). `D` and `T`
