@@ -1,9 +1,9 @@
 # Wii U build (phase 3)
 
 This note covers building the game as a Wii U app, installing it, and what the
-pieces are. At this stage the app starts, finds its files on the SD card and
-runs the game, but it can't draw the game yet. That needs the GX2 renderer,
-which is phase 4. Until then it shows a text page instead.
+pieces are. Phase 3 got the app to start, find its files on the SD card and
+run the game without drawing it. Drawing came in phase 4, see
+[gx2-renderer.md](gx2-renderer.md).
 
 ## Building
 
@@ -55,13 +55,81 @@ so the ROM goes in `sdcard/wiiu/apps/perfectdark/data/` there.
 
 - **Without the ROM:** an error page saying the ROM file couldn't be opened,
   with where it should go. Press any button to return to the Wii U Menu.
-- **With the ROM:** a status page saying the game is running, with a frame
-  counter and the game's recent log messages. The game itself is running behind
-  it: loading the ROM, starting the title screen and running its main loop.
-  It just has nothing to draw with yet. Press HOME to quit.
+- **With the ROM:** the startup page while the ROM loads, then the game
+  itself, drawn by the GX2 renderer (phase 4). Press HOME for the HOME menu.
+  (Phase 3 builds showed a status page with a frame counter instead.)
 
 Any other startup problem shows the same error page with its message, so
 problems can be read off the screen without a PC attached.
+
+## Debug overlay
+
+Press **Minus** to show or hide numbers in the top left corner:
+
+| Line | Meaning |
+|---|---|
+| FPS | Frames shown per second (the screen refreshes at 60) |
+| frame, worst | Average and longest time between frames over the last half second |
+| CPU busy, GPU wait | How much of each frame the CPU spent working (game logic and preparing the drawing) and how long it then waited for the GPU to show the previous frame. A short wait with a low FPS means the CPU is the bottleneck. |
+| draws, tris, verts | What the renderer sent to the GPU that frame |
+| shaders, free mem | Shaders made so far, and free main memory |
+
+Minus isn't used by the game (it's SDL's "Back" button, which the default
+bindings leave free). The toggle is in `port/wiiu/gfx_wiiu.c`
+(`wiiu_handle_events`), the overlay in `port/wiiu/wiiu_overlay.c`.
+
+## Controls
+
+The Wii U build uses the PC port's controller bindings unchanged
+(`pcjoybinds` in `port/src/input.c`). SDL reports the GamePad's and Pro
+Controller's buttons by the names printed on them, so "A" below is the
+button labelled A.
+
+The game only understands N64 controller buttons, so each Wii U button
+stands in for one. The game starts in the PC port's own control style
+("ExtendedControls" in `pd.ini`, on by default); it's set up for two
+sticks, and uses the N64 buttons like this:
+
+| Wii U | N64 button the game sees | Does (PC port control style) |
+|---|---|---|
+| Right stick | Control stick | Look and turn |
+| Left stick | Second stick (the 2-controller styles' second pad) | Walk and strafe |
+| ZR | Z | Fire; accept in menus |
+| ZL | R | Aim |
+| R | L | Switch to the weapon's other fire mode |
+| L | D-pad down | Weapon wheel |
+| A | A | Use (doors, switches); accept in menus |
+| B | D-pad left | Previous weapon; back in menus |
+| X | X (extra button `0x40`) | Reload |
+| Y | Y (extra button `0x80`) | Next weapon |
+| + | Start | Pause menu |
+| D-pad | C buttons (up, down, left, right) | Whatever the C buttons do in the chosen control style |
+| Left stick click | Extra button `0x8000` | Crouch: stand, half, full |
+| Minus | (none) | Debug overlay |
+| Right stick click | (none) | Nothing |
+
+Combinations from the PC port: A + ZR, or R + ZR, fires the other fire mode
+once; A + B, or A + X, detonates remote mines.
+
+Two settings change this: **SwapSticks** (on by default) makes the right
+stick the N64 control stick; with it off the left stick is. With
+**ExtendedControls** off, the game uses its original N64 control styles
+(1.1 to 2.4, picked in the game's options), where the N64 buttons mean what
+they did on the N64. Both are in `pd.ini`. So is a per-button binding list,
+which can be edited to remap.
+
+Nothing has been changed for the Wii U yet. Phase 5 is where the bindings,
+Wii Remotes and the touch screen get looked at properly.
+
+## Name entry keyboard
+
+The PC port adds a "TYPE WITH KEYBOARD" row to the game's on-screen keyboard.
+It switches to typing on a real keyboard, and you leave it with Esc, which a
+Wii U doesn't have. The Wii U build leaves the row out and keeps the N64's
+five-row keyboard (`src/game/menuitem.c`, `MENU_KEYBOARD_ROWS`).
+
+Ideas for later (phase 5): use the Wii U's own on-screen keyboard for names,
+and the GamePad's touch screen for menus.
 
 While the game starts up, a "Starting up..." page lists its log messages as
 they happen. If startup hangs, the last line on screen shows where. The full
@@ -114,6 +182,8 @@ shifting by the difference first.
 |---|---|---|
 | Stuck on the splash screen, power-off needed | Not known at the time; there was no way to see where it stopped | Startup log on screen and in `pd.log`; 8 MB game stack; crash and freeze recovery (above) |
 | "The game crashed (bad memory access)", address `00000008`, in `sysSleep()` the first time the game waited for its next frame | wut's `nanosleep()` writes the "time remaining" result into its second argument without checking for NULL, which the PC code passes. Linux's C library checks, so QEMU didn't show it. | On the Wii U, `sysSleep()` uses the console's own `OSSleepTicks()` |
+| Crash as soon as CamSpy was selected, address `0000066c`, in `gfx_gx2_copy_framebuffer` | Framebuffer ids were memory addresses, but the game's framebuffer copy command packs two ids into 11 bits each, so they arrived cut short | Ids are small numbers (an index), like the OpenGL back end's |
+| HUD text (bottom of the screen, ammo counter) illegible | A bug in the borrowed shader generator: with two clamped textures, asking texture 1 for its size overwrote its own coordinates, because both used register R2 | Texture registers skip R1 and R2 (`third_party/libultraship/README.md`) |
 
 The crash was found by the crash page: the `PC` and `Callers` addresses,
 shifted by the difference in `pdMain`'s address and run through `addr2line`,
@@ -134,12 +204,10 @@ that owns the window and its events, and a *rendering back end*
 (`gfx_opengl.cpp`) that turns draw calls into OpenGL. The Wii U has no OpenGL,
 so both are swapped out:
 
-- **`port/wiiu/gfx_wiiu.c`**, the Wii U window manager. For now it uses
-  SDL's own small 2D renderer, which runs on GX2, to show the status page.
-  Phase 4 replaces it with a screen set up for the real renderer.
-- **`port/fast3d/gfx_gx2.cpp`**, the GX2 rendering back end. For now it's a
-  placeholder that accepts every call and draws nothing, so the rest of the
-  game runs normally around it. Phase 4 fills it in.
+- **`port/wiiu/gfx_wiiu.c`**, the Wii U window manager. SDL sets up the
+  screen; this paces frames and shows them.
+- **`port/fast3d/gfx_gx2.cpp`**, the GX2 rendering back end, which draws the
+  game. In phase 3 it was a placeholder that drew nothing.
 
 ## Changes made
 

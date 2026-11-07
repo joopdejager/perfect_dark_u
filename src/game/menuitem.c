@@ -24,6 +24,12 @@
 #include "types.h"
 #ifndef PLATFORM_N64
 #include "input.h"
+#endif
+
+// The PC port adds a sixth keyboard row, "TYPE WITH KEYBOARD", which switches
+// to typing on a real keyboard and is left with Esc. A Wii U has no Esc key
+// to hand, so it keeps the N64's five rows.
+#if !defined(PLATFORM_N64) && !defined(PLATFORM_WIIU)
 #define MENU_KEYBOARD_ROWS 6
 #else
 #define MENU_KEYBOARD_ROWS 5

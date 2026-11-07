@@ -3,14 +3,24 @@
 // This is the Wii U's counterpart of port/fast3d/gfx_sdl2.cpp. It owns the
 // screen and handles system events (such as the HOME menu) and frame timing.
 //
-// For now (phase 3) the screen is SDL's own GX2-backed 2D renderer, and each
-// frame it shows a status page instead of the game's picture, because the
-// GX2 renderer that would draw the game doesn't exist yet. Phase 4 replaces
-// this with a screen set up for that renderer.
+// SDL's Wii U video driver does the system side of the screen: it starts
+// GX2, sets up the TV and GamePad screen buffers, and handles the HOME menu
+// (which takes the screen away and gives it back). We keep all of that and
+// only add frame pacing and showing frames. The game's picture itself is
+// drawn by port/fast3d/gfx_gx2.cpp, which also copies it into SDL's screen
+// buffers at the end of each frame.
+//
+// SDL's own 2D renderer is still used for the startup page and the error
+// page (port/wiiu/wiiu_screen.c). Each side keeps its GPU settings in its
+// own context state, so they don't disturb each other.
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL.h>
+#include <gx2/event.h>
+#include <gx2/swap.h>
+#include <gx2/display.h>
+#include <gx2/state.h>
 
 #include "platform.h"
 #include "system.h"
@@ -18,12 +28,12 @@
 #include "../fast3d/gfx_window_manager_api.h"
 #include "wiiu.h"
 #include "wiiu_screen.h"
+#include "wiiu_overlay.h"
 
 static SDL_Renderer *ren;
 static int targetFps = 60;
 static int swapInterval = 1;
 static Uint64 perfFreq;
-static Uint64 startCounter;
 static unsigned int frameCount;
 
 static void wiiu_init(const struct GfxWindowInitSettings *set)
@@ -34,7 +44,8 @@ static void wiiu_init(const struct GfxWindowInitSettings *set)
 	}
 	sysLogPrintf(LOG_NOTE, "wiiu: screen ready");
 	perfFreq = SDL_GetPerformanceFrequency();
-	startCounter = SDL_GetPerformanceCounter();
+	// show each frame at the next vertical blank (60 Hz)
+	GX2SetSwapInterval(swapInterval);
 }
 
 static void wiiu_close(void)
@@ -106,48 +117,49 @@ static void wiiu_handle_events(void)
 		if (ev.type == SDL_QUIT) {
 			exit(0);
 		}
+		// Minus shows or hides the debug overlay; the game doesn't use it
+		if (ev.type == SDL_CONTROLLERBUTTONDOWN && ev.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+			wiiuOverlayToggle();
+		}
 	}
 }
 
 static bool wiiu_start_frame(void)
 {
-	return true;
-}
-
-static void wiiu_draw_status(void)
-{
-	char line[256];
-	const double secs = (double)(SDL_GetPerformanceCounter() - startCounter) / (double)perfFreq;
-
-	SDL_SetRenderDrawColor(ren, 0x08, 0x08, 0x10, 0xff);
-	SDL_RenderClear(ren);
-
-	int y = 48;
-	y = wiiuScreenText(48, y, 4, 0xff4040, "Perfect Dark");
-	y += 8;
-	y = wiiuScreenText(48, y, 2, 0xffffff,
-		"The game is running natively on the Wii U.\n"
-		"The renderer that draws it is not written yet (phase 4),\n"
-		"so this status page is shown instead.");
-	y += 16;
-	snprintf(line, sizeof(line), "Frames: %u   Time: %.0f s", frameCount, secs);
-	y = wiiuScreenText(48, y, 2, 0x80ff80, line);
-	y += 8;
-	y = wiiuScreenText(48, y, 2, 0xc0c0c0, "Press HOME to quit.");
-	y += 24;
-	wiiuScreenLog(y, 2);
+	// Wait until the GPU has shown the previous frame. That paces the game to
+	// the screen, and it means the GPU is done with the previous frame's
+	// vertex data, so gfx_gx2.cpp can reuse that memory. If the GPU takes
+	// longer than 10 screen refreshes, skip this frame.
+	const OSTime start = OSGetSystemTime();
+	for (int waits = 0; waits < 10; ++waits) {
+		uint32_t swapCount, flipCount;
+		OSTime lastFlip, lastVsync;
+		GX2GetSwapStatus(&swapCount, &flipCount, &lastFlip, &lastVsync);
+		if (flipCount >= swapCount) {
+			wiiuOverlayFrameWaited(OSGetSystemTime() - start);
+			return true;
+		}
+		GX2WaitForVsync();
+	}
+	wiiuOverlayFrameWaited(OSGetSystemTime() - start);
+	return false;
 }
 
 static void wiiu_swap_buffers_begin(void)
 {
 	wiiuWatchdogBeat();
 	if (++frameCount == 1) {
+		// from here on the game draws the screen, not the startup page
 		wiiuScreenBootDone();
 		sysLogPrintf(LOG_NOTE, "wiiu: first frame");
 	}
-	wiiu_draw_status();
-	// waits for the next vertical blank, which paces the game at 60 Hz
-	SDL_RenderPresent(ren);
+
+	// gfx_gx2.cpp has copied the frame into the screen buffers; show it
+	GX2SwapScanBuffers();
+	GX2Flush();
+	wiiuOverlayFrameShown();
+	GX2SetTVEnable(TRUE);
+	GX2SetDRCEnable(TRUE);
 }
 
 static void wiiu_swap_buffers_end(void)

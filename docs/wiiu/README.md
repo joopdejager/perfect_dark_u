@@ -47,13 +47,14 @@ second back end that turns them into GX2 calls, GX2 being the Wii U's graphics A
 | `docs/wiiu/` | This documentation |
 | `tools/wiiu/` | Build and test scripts |
 
-`gfx_gx2.cpp` is still a placeholder; phase 4 fills it in.
+`gfx_gx2.cpp` is being filled in during phase 4.
 
 Notes so far:
 
 - [linux-build.md](linux-build.md): building and running the PC version.
 - [big-endian.md](big-endian.md): making the port work on big-endian CPUs, tested under QEMU.
 - [wiiu-build.md](wiiu-build.md): building, installing and running the Wii U app.
+- [gx2-renderer.md](gx2-renderer.md): how the game is drawn on the Wii U.
 
 ## Why this route
 
@@ -89,6 +90,20 @@ Current phase: **4, GX2 renderer.** Done so far:
 - Phase 1: the Linux build ([linux-build.md](linux-build.md)).
 - Phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
 - Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
+- Phase 4, stage 1: a GX2 back end that draws the game, tested on a Wii U ([gx2-renderer.md](gx2-renderer.md)). Also a debug overlay (Minus).
+
+## Open issues from testing
+
+Found on the console, parked until their phase:
+
+| Issue | Notes | Phase |
+|---|---|---|
+| 60 FPS drops to 30 in some scenes | The game waits for the screen's refresh, so a frame that misses 16.7 ms waits for the next one: 60 falls straight to 30. In a level 2 room with a light in view: CPU busy 11 ms, GPU wait 23 ms, so the GPU was too slow. The screen buffers moved to MEM1 for that ([gx2-renderer.md](gx2-renderer.md), Memory); to be retested. | 4, 6 |
+| CamSpy showed nothing | Its lens redraws a copy of the screen, and framebuffer copies weren't written yet. Now they are; to be retested. | 4 |
+| Controls differ from the N64 | The default is the PC port's two-stick style (see [wiiu-build.md](wiiu-build.md), Controls). Which N64 behaviour to bring back is still to be decided. | 5 |
+| Looking around is too sensitive | The PC port maps a full stick push to ±127; a real N64 stick only reaches about ±80, and the game's turn speed was tuned for that. Options → Extended → Controller → RStick Scale X/Y adjusts it; once a good value is found it can become the Wii U default. | 5 |
+| The TV lags behind the GamePad | Each frame goes to both screens' buffers at the same moment and both swap together, so the app shows them at the same time. The difference is most likely the TV's own picture processing (try its Game mode) or upscaling 720p to 1080p. To check: compare with a retail Wii U game on the same TV. | - |
+| Tint was off under QEMU | Seen only in phase 2's emulator test, not on the console. | - |
 
 ## Keeping up with the PC port
 
@@ -114,7 +129,9 @@ checks, so these merges stay easy.
 - Decompilation and PC port: MIT (`LICENSE`).
 - Fast3D renderer: MIT (`port/fast3d/LICENSE.txt`).
 - Anything added under `third_party/` keeps its own licence, recorded next to it.
-  So far: `font8x8` (public domain), used for the Wii U's text pages.
+  So far: `font8x8` (public domain), used for the Wii U's text pages, and
+  `libultraship` (MIT), the GX2 shader generator. `port/fast3d/gfx_gx2.cpp`
+  is also based on libultraship's GX2 back end and says so at the top.
   Code under GPL, such as GLideN64 or Our64's own code, isn't copied in, because
   it would make the whole port GPL. Reading it for reference is fine.
 
