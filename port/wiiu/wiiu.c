@@ -5,6 +5,7 @@
 #include <SDL.h>
 #include <coreinit/debug.h>
 #include <coreinit/time.h>
+#include <coreinit/thread.h>
 
 #include "wiiu.h"
 #include "wiiu_screen.h"
@@ -21,6 +22,11 @@ static void wiiuShutdown(void)
 unsigned long long wiiuGetMicroseconds(void)
 {
 	return (unsigned long long)OSTicksToMicroseconds(OSGetSystemTime());
+}
+
+void wiiuSleepNanoseconds(unsigned long long ns)
+{
+	OSSleepTicks(OSNanosecondsToTicks(ns));
 }
 
 void wiiuInit(void)

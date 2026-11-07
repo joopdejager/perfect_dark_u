@@ -22,6 +22,10 @@ extern "C" {
 // Microseconds since the console started, from its own clock.
 unsigned long long wiiuGetMicroseconds(void);
 
+// Sleeps using the console's own timer. Used instead of nanosleep(), which
+// in wut writes to its optional second argument even when it's NULL.
+void wiiuSleepNanoseconds(unsigned long long ns);
+
 // Called once at startup from sysInit(): creates the folders above so the
 // user only has to copy the ROM in.
 void wiiuInit(void);

@@ -348,6 +348,9 @@ void sysSleep(const s64 hns)
 	li.QuadPart = -hns;
 	SetWaitableTimer(timer, &li, 0, NULL, NULL, FALSE);
 	WaitForSingleObject(timer, INFINITE);
+#elif defined(PLATFORM_WIIU)
+	// wut's nanosleep() crashes when its second argument is NULL
+	wiiuSleepNanoseconds(hns * 100);
 #else
 	const struct timespec spec = { 0, hns * 100 };
 	nanosleep(&spec, NULL);

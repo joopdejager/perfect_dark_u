@@ -108,6 +108,17 @@ If `pdMain is at` on the page differs from `pdMain`'s address in the `.elf`
 (`powerpc-eabi-nm`), the code was loaded elsewhere and the addresses need
 shifting by the difference first.
 
+## Bugs found on the console
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Stuck on the splash screen, power-off needed | Not known at the time; there was no way to see where it stopped | Startup log on screen and in `pd.log`; 8 MB game stack; crash and freeze recovery (above) |
+| "The game crashed (bad memory access)", address `00000008`, in `sysSleep()` the first time the game waited for its next frame | wut's `nanosleep()` writes the "time remaining" result into its second argument without checking for NULL, which the PC code passes. Linux's C library checks, so QEMU didn't show it. | On the Wii U, `sysSleep()` uses the console's own `OSSleepTicks()` |
+
+The crash was found by the crash page: the `PC` and `Callers` addresses,
+shifted by the difference in `pdMain`'s address and run through `addr2line`,
+named `__wut_nanosleep` called from `sysSleep` called from `frametimeCalculate`.
+
 ## How the pieces fit
 
 | Piece | What it is |
