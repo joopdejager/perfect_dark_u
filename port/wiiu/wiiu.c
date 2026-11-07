@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <SDL.h>
 #include <coreinit/debug.h>
+#include <coreinit/time.h>
 
 #include "wiiu.h"
 #include "wiiu_screen.h"
@@ -15,6 +16,11 @@ static void wiiuShutdown(void)
 	// Wii U Menu if we're quitting on our own, or finishes closing if the
 	// user picked "Close" in the HOME menu.
 	SDL_Quit();
+}
+
+unsigned long long wiiuGetMicroseconds(void)
+{
+	return (unsigned long long)OSTicksToMicroseconds(OSGetSystemTime());
 }
 
 void wiiuInit(void)
@@ -80,7 +86,7 @@ void wiiuShowFatalError(const char *msg)
 		y += 24;
 		wiiuScreenText(48, y, 2, 0xffd060, "Press any button to return to the Wii U Menu.");
 		y += 40;
-		wiiuScreenLog(y, 1);
+		wiiuScreenLog(y, 2);
 
 		SDL_RenderPresent(ren);
 	}

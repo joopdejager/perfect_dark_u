@@ -32,6 +32,11 @@ void wiiuScreenLog(int y, int scale);
 // Remembers a log line for wiiuScreenLog(). Called by sysLogPrintf().
 void wiiuScreenAddLogLine(const char *prefix, const char *msg);
 
+// Until the game draws its first frame, each new log line is shown on screen
+// straight away (a startup page), so a hang during startup shows where it
+// stopped. The window manager calls this at the first frame to end that.
+void wiiuScreenBootDone(void);
+
 // Closes the window and SDL. Safe to call more than once.
 void wiiuScreenShutdown(void);
 

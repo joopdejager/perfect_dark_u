@@ -63,6 +63,22 @@ so the ROM goes in `sdcard/wiiu/apps/perfectdark/data/` there.
 Any other startup problem shows the same error page with its message, so
 problems can be read off the screen without a PC attached.
 
+While the game starts up, a "Starting up..." page lists its log messages as
+they happen. If startup hangs, the last line on screen shows where. The full
+log is also saved to `sd:/wiiu/apps/perfectdark/pd.log` on every run (with the
+FTP plugin running, it can be fetched over the network).
+
+## The main thread's stack
+
+The first test on hardware got stuck on the splash screen. The likeliest
+cause: the Wii U gives an app's main thread a small stack by default, and the
+game was written for PCs, where the main thread gets megabytes. Running out of
+stack on the Wii U doesn't always crash; it can silently overwrite other memory
+and hang. So `port/wiiu/wiiu_main.c` now moves to an 8 MB stack before running
+the game's real `main()`. It uses a "fiber" switch, which keeps the same thread
+and CPU core, because SDL's video and the HOME menu handling must stay on the
+core the app started on.
+
 ## How the pieces fit
 
 | Piece | What it is |
@@ -108,8 +124,6 @@ and the PC build compiles exactly the files it did before.
 These builds haven't run on a Wii U or in Cemu yet. The cloud sessions that
 build them can't run either. Things to watch for on the first run:
 
-- **The main thread's stack size.** If the game crashes early with the ROM
-  in place, the Wii U's default stack may be too small for it.
 - **Controllers and audio.** SDL should handle both, but neither has been
   tried. Phase 5 covers them properly.
 - **Saving.** `pd.ini` and save files should appear in

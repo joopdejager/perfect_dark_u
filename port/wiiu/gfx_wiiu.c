@@ -32,6 +32,7 @@ static void wiiu_init(const struct GfxWindowInitSettings *set)
 	if (!ren) {
 		sysFatalError("Could not start video:\n%s", SDL_GetError());
 	}
+	sysLogPrintf(LOG_NOTE, "wiiu: screen ready");
 	perfFreq = SDL_GetPerformanceFrequency();
 	startCounter = SDL_GetPerformanceCounter();
 }
@@ -134,12 +135,15 @@ static void wiiu_draw_status(void)
 	y += 8;
 	y = wiiuScreenText(48, y, 2, 0xc0c0c0, "Press HOME to quit.");
 	y += 24;
-	wiiuScreenLog(y, 1);
+	wiiuScreenLog(y, 2);
 }
 
 static void wiiu_swap_buffers_begin(void)
 {
-	++frameCount;
+	if (++frameCount == 1) {
+		wiiuScreenBootDone();
+		sysLogPrintf(LOG_NOTE, "wiiu: first frame");
+	}
 	wiiu_draw_status();
 	// waits for the next vertical blank, which paces the game at 60 Hz
 	SDL_RenderPresent(ren);

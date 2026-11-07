@@ -17,6 +17,9 @@ extern "C" {
 #define WIIU_APP_DIR_DISPLAY  "sd:/wiiu/apps/perfectdark"
 #define WIIU_DATA_DIR_DISPLAY WIIU_APP_DIR_DISPLAY "/data"
 
+// Microseconds since the console started, from its own clock.
+unsigned long long wiiuGetMicroseconds(void);
+
 // Called once at startup from sysInit(): creates the folders above so the
 // user only has to copy the ROM in.
 void wiiuInit(void);

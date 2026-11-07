@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <SDL.h>
+#include <coreinit/thread.h>
 
 #include "wiiu_screen.h"
 
@@ -16,6 +17,9 @@
 static SDL_Window *wnd;
 static SDL_Renderer *ren;
 static SDL_Texture *fontTex;
+
+static int booting = 1;
+static OSThread *bootThread; // the thread that may draw the startup page
 
 static char logLines[LOG_LINES][LOG_LINE_LEN];
 static int logNext;
@@ -46,6 +50,8 @@ static void screenCreateFont(void)
 	}
 }
 
+static void screenDrawBootPage(void);
+
 SDL_Renderer *wiiuScreenGetRenderer(void)
 {
 	if (ren) {
@@ -74,6 +80,9 @@ SDL_Renderer *wiiuScreenGetRenderer(void)
 	}
 
 	screenCreateFont();
+
+	bootThread = OSGetCurrentThread();
+	screenDrawBootPage();
 
 	return ren;
 }
@@ -143,6 +152,21 @@ void wiiuScreenLog(int y, int scale)
 	}
 }
 
+static void screenDrawBootPage(void)
+{
+	SDL_SetRenderDrawColor(ren, 0x08, 0x08, 0x10, 0xff);
+	SDL_RenderClear(ren);
+	int y = wiiuScreenText(48, 48, 4, 0xff4040, "Perfect Dark");
+	y = wiiuScreenText(48, y + 8, 2, 0xffffff, "Starting up...");
+	wiiuScreenLog(y + 16, 2);
+	SDL_RenderPresent(ren);
+}
+
+void wiiuScreenBootDone(void)
+{
+	booting = 0;
+}
+
 void wiiuScreenAddLogLine(const char *prefix, const char *msg)
 {
 	// split multi-line messages so each line is stored separately
@@ -157,6 +181,11 @@ void wiiuScreenAddLogLine(const char *prefix, const char *msg)
 		}
 		start = end ? end + 1 : NULL;
 		prefix = "";
+	}
+
+	// SDL's renderer may only be used from the thread that created it
+	if (booting && ren && OSGetCurrentThread() == bootThread) {
+		screenDrawBootPage();
 	}
 }
 

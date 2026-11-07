@@ -67,8 +67,13 @@ static const char **sysArgv;
 static inline void sysLogSetPath(const char *fname)
 {
 	// figure out where the log is and clear it
+#ifdef PLATFORM_WIIU
+	// next to the settings, where FTP or a PC can get at it
+	snprintf(logPath, sizeof(logPath), "%s/%s", WIIU_APP_DIR, fname);
+#else
 	// try working dir first
 	snprintf(logPath, sizeof(logPath), "./%s", fname);
+#endif
 	FILE *f = fopen(logPath, "wb");
 	if (!f) {
 		// try home dir
@@ -96,9 +101,14 @@ void sysInit(void)
 	wiiuInit();
 #endif
 
+#ifdef PLATFORM_WIIU
+	// there's no console to read on the Wii U, so always keep a log file
+	sysLogSetPath(LOG_FNAME);
+#else
 	if (sysArgCheck("--log")) {
 		sysLogSetPath(LOG_FNAME);
 	}
+#endif
 
 #ifdef VERSION_HASH
 	sysLogPrintf(LOG_NOTE, "version: " VERSION_BRANCH " " VERSION_HASH " (" VERSION_TARGET ")");
@@ -160,6 +170,10 @@ s32 sysArgGetInt(const char *arg, s32 defval)
 
 u64 sysGetMicroseconds(void)
 {
+#ifdef PLATFORM_WIIU
+	// the console's own clock: monotonic and precise
+	return wiiuGetMicroseconds() - startTick;
+#endif
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return ((u64)tv.tv_sec * USEC_IN_SEC + (u64)tv.tv_usec) - startTick;
