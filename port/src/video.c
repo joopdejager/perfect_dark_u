@@ -10,10 +10,15 @@
 #include "video.h"
 
 #include "../fast3d/gfx_api.h"
+#ifdef PLATFORM_WIIU
+#include "../fast3d/gfx_gx2.h"
+extern struct GfxWindowManagerAPI gfx_wiiu; // port/wiiu/gfx_wiiu.c
+#else
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
+#endif
 
-#ifdef PLATFORM_NSWITCH
+#if defined(PLATFORM_NSWITCH) || defined(PLATFORM_WIIU)
 #define DEFAULT_VID_WIDTH 1280
 #define DEFAULT_VID_HEIGHT 720
 #define DEFAULT_VID_FULLSCREEN true
@@ -71,8 +76,13 @@ void optionsMenuInit();
 
 s32 videoInit(void)
 {
+#ifdef PLATFORM_WIIU
+	wmAPI = &gfx_wiiu;
+	renderingAPI = &gfx_gx2_api;
+#else
 	wmAPI = &gfx_sdl;
 	renderingAPI = &gfx_opengl_api;
+#endif
 
 	gfx_current_native_viewport.width = 320;
 	gfx_current_native_viewport.height = 220;

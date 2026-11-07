@@ -1,0 +1,116 @@
+# Wii U build (phase 3)
+
+This note covers building the game as a Wii U app, installing it, and what the
+pieces are. At this stage the app starts, finds its files on the SD card and
+runs the game, but it can't draw the game yet. That needs the GX2 renderer,
+which is phase 4. Until then it shows a text page instead.
+
+## Building
+
+The Wii U toolchain comes from devkitPro. The easiest way to get it is
+devkitPro's official Docker image, which needs nothing else installed:
+
+```bash
+tools/wiiu/build-wiiu.sh
+```
+
+The result is `build-wiiu/pd.ppc.wuhb`. With devkitPro installed natively
+(`DEVKITPRO` set), the same build without Docker is:
+
+```bash
+cmake -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/WiiU.cmake -Bbuild-wiiu .
+```
+
+```bash
+cmake --build build-wiiu -j4
+```
+
+The configure step should print `Target platform: ppc-wiiu` and
+`Target is big-endian: TRUE`.
+
+devkitPro's package servers refuse connections from cloud data centres, which
+is why the cloud sessions working on this repository use the Docker image.
+At home either way works.
+
+## Installing
+
+You need a Wii U running the [Aroma](https://aroma.foryour.cafe/) homebrew
+environment.
+
+1. Copy `pd.ppc.wuhb` to `sd:/wiiu/apps/` on the SD card. Any file name works,
+   for example `perfectdark.wuhb`.
+2. Copy your ROM to `sd:/wiiu/apps/perfectdark/data/pd.ntsc-final.z64`. It must
+   be the NTSC 1.1 ROM in `.z64` byte order, the same one the PC port uses.
+   The app creates this folder on its first run, so you can also start it once
+   first and copy the ROM in afterwards.
+3. Perfect Dark now appears on the Wii U Menu. Start it like any other app.
+
+Settings (`pd.ini`) and saves go in `sd:/wiiu/apps/perfectdark/`.
+
+It also runs in [Cemu](https://cemu.info/): use File → Load and pick the
+`.wuhb`. Cemu's emulated SD card is the `sdcard` folder in its data folder,
+so the ROM goes in `sdcard/wiiu/apps/perfectdark/data/` there.
+
+## What you'll see
+
+- **Without the ROM:** an error page saying the ROM file couldn't be opened,
+  with where it should go. Press any button to return to the Wii U Menu.
+- **With the ROM:** a status page saying the game is running, with a frame
+  counter and the game's recent log messages. The game itself is running behind
+  it: loading the ROM, starting the title screen and running its main loop.
+  It just has nothing to draw with yet. Press HOME to quit.
+
+Any other startup problem shows the same error page with its message, so
+problems can be read off the screen without a PC attached.
+
+## How the pieces fit
+
+| Piece | What it is |
+|---|---|
+| `.elf` | What the compiler produces, the same format Linux uses. |
+| `.rpx` | The Wii U's own executable format. `elf2rpl` converts the `.elf`. |
+| `.wuhb` | "Wii U Homebrew Bundle": the `.rpx` plus a name, an icon and splash screens. Aroma lists these on the Wii U Menu. |
+| wut | The library for writing Wii U homebrew: the C library, file access, and headers for the Wii U's system libraries. |
+| SDL2 for Wii U | The same SDL2 the PC port uses, ported to the Wii U. It handles the window, controllers, audio and the HOME menu. That's why so little new code was needed. |
+
+On a PC, Fast3D draws through two parts: a *window manager* (`gfx_sdl2.cpp`)
+that owns the window and its events, and a *rendering back end*
+(`gfx_opengl.cpp`) that turns draw calls into OpenGL. The Wii U has no OpenGL,
+so both are swapped out:
+
+- **`port/wiiu/gfx_wiiu.c`**, the Wii U window manager. For now it uses
+  SDL's own small 2D renderer, which runs on GX2, to show the status page.
+  Phase 4 replaces it with a screen set up for the real renderer.
+- **`port/fast3d/gfx_gx2.cpp`**, the GX2 rendering back end. For now it's a
+  placeholder that accepts every call and draws nothing, so the rest of the
+  game runs normally around it. Phase 4 fills it in.
+
+## Changes made
+
+| File | Change |
+|---|---|
+| `CMakeLists.txt` | A Wii U target: picks SDL2 and zlib from devkitPro, leaves out the OpenGL files, builds the `.rpx` and `.wuhb`. Other platforms leave out the Wii U files. |
+| `src/include/platform.h` | Recognise the Wii U (`PLATFORM_WIIU`). |
+| `port/src/video.c` | Use the Wii U window manager and GX2 back end; 1280×720 by default. |
+| `port/src/system.c` | Wii U startup hook, error page instead of a message box, SD card paths, on-screen log. |
+| `port/src/fs.c` | On the Wii U, keep everything in the app's SD card folder. |
+| `port/wiiu/` | New: the Wii U platform layer (paths, error page, text drawing, window manager). |
+| `port/fast3d/gfx_gx2.*` | New: placeholder GX2 back end. |
+| `dist/wiiu/` | New: icon and splash screens (plain text, no game artwork). |
+| `third_party/font8x8/` | New: a public domain 8×8 bitmap font for the text pages. |
+| `tools/wiiu/build-wiiu.sh` | New: the Docker build. |
+
+Each change to a shared file is behind `PLATFORM_WIIU` or `NINTENDO_WIIU`,
+and the PC build compiles exactly the files it did before.
+
+## Not tested yet
+
+These builds haven't run on a Wii U or in Cemu yet. The cloud sessions that
+build them can't run either. Things to watch for on the first run:
+
+- **The main thread's stack size.** If the game crashes early with the ROM
+  in place, the Wii U's default stack may be too small for it.
+- **Controllers and audio.** SDL should handle both, but neither has been
+  tried. Phase 5 covers them properly.
+- **Saving.** `pd.ini` and save files should appear in
+  `sd:/wiiu/apps/perfectdark/`.

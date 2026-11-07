@@ -46,13 +46,25 @@ cmake --build build -j4
 The executable is `build/pd.<arch>`. Running it needs `data/pd.ntsc-final.z64`
 next to it. The game targets the ntsc-final ROM (md5 `e03b088b6ac9e0080440efed07c1e40f`).
 
-Wii U build instructions will be added in phase 3.
+## Building (Wii U target)
+
+Needs Docker (uses the `devkitpro/devkitppc` image), or a native devkitPro
+install with wut and wiiu-sdl2:
+
+```bash
+tools/wiiu/build-wiiu.sh
+```
+
+Output: `build-wiiu/pd.ppc.wuhb`. Details in `docs/wiiu/wiiu-build.md`.
+devkitPro's servers block cloud IPs, so cloud sessions must use the Docker image.
 
 ## Platform facts worth remembering
 
-- The Wii U is big-endian with 32-bit pointers, like the N64. The port's
-  `PLATFORM_BIG_ENDIAN` switch (`src/include/platform.h`) exists but has never
-  been tested, and `CMakeLists.txt` hard-codes `TARGET_IS_BIG_ENDIAN FALSE`.
+- The Wii U is big-endian with 32-bit pointers, like the N64. `CMakeLists.txt`
+  detects the byte order and defines `PLATFORM_BIG_ENDIAN`; big-endian support
+  was tested under qemu-ppc in phase 2 (`docs/wiiu/big-endian.md`).
+- Wii U code is selected with `PLATFORM_WIIU` in C (`src/include/platform.h`)
+  and `NINTENDO_WIIU` in CMake.
 - Data loaded from the ROM goes through the converters in `port/src/preprocess/`.
   On big-endian, byte swaps there should become no-ops; bugs show up as
   silently corrupt data, not crashes.

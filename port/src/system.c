@@ -13,6 +13,10 @@
 #include <PR/ultratypes.h>
 #include "platform.h"
 #include "system.h"
+#ifdef PLATFORM_WIIU
+#include "../wiiu/wiiu.h"
+#include "../wiiu/wiiu_screen.h"
+#endif
 
 #ifdef PLATFORM_WIN32
 
@@ -87,6 +91,10 @@ void sysInitArgs(s32 argc, const char **argv)
 void sysInit(void)
 {
 	startTick = sysGetMicroseconds();
+
+#ifdef PLATFORM_WIIU
+	wiiuInit();
+#endif
 
 	if (sysArgCheck("--log")) {
 		sysLogSetPath(LOG_FNAME);
@@ -185,6 +193,11 @@ void sysLogPrintf(s32 level, const char *fmt, ...)
 
 	FILE *fout = (level == LOG_NOTE) ? stdout : stderr;
 	fprintf(fout, "%s%s\n", prefix[level], logmsg);
+
+#ifdef PLATFORM_WIIU
+	// keep recent lines for the on-screen log, since there's no console
+	wiiuScreenAddLogLine(prefix[level], logmsg);
+#endif
 }
 
 void sysFatalError(const char *fmt, ...)
@@ -209,13 +222,24 @@ void sysFatalError(const char *fmt, ...)
 	fflush(stdout);
 	fflush(stderr);
 
+#ifdef PLATFORM_WIIU
+	// SDL has no message boxes on the Wii U
+	wiiuShowFatalError(errmsg);
+#else
 	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal error", errmsg, NULL);
+#endif
 
 	exit(1);
 }
 
 void sysGetExecutablePath(char *outPath, const u32 outLen)
 {
+#ifdef PLATFORM_WIIU
+	// The app itself is a .wuhb bundle; use its folder on the SD card instead.
+	snprintf(outPath, outLen, "%s", WIIU_APP_DIR);
+	return;
+#endif
+
 	// try asking SDL
 	char *sdlPath = SDL_GetBasePath();
 
@@ -250,6 +274,11 @@ void sysGetExecutablePath(char *outPath, const u32 outLen)
 
 void sysGetHomePath(char *outPath, const u32 outLen)
 {
+#ifdef PLATFORM_WIIU
+	snprintf(outPath, outLen, "%s", WIIU_APP_DIR);
+	return;
+#endif
+
 	// try asking SDL
 	char *sdlPath = SDL_GetPrefPath("", "perfectdark");
 

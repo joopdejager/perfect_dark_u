@@ -76,6 +76,9 @@ elseif(APPLE)
 elseif(NINTENDO_SWITCH)
   # Switch
   set(TARGET_OS "nswitch")
+elseif(NINTENDO_WIIU)
+  # Wii U (set by devkitPro's WiiU.cmake toolchain file); see docs/wiiu/wiiu-build.md
+  set(TARGET_OS "wiiu")
 elseif(UNIX)
   # Generic *nix; assume Linux
   set(TARGET_OS "linux")
@@ -231,6 +234,11 @@ if(NINTENDO_SWITCH)
     set(SDL2_LIBRARY "SDL2")
     set(SDL2_INCLUDE_DIR "${DEVKITPRO}/portlibs/switch/include/SDL2")
   endif()
+elseif(NINTENDO_WIIU)
+  if(NOT SDL2_LIBRARY OR NOT SDL2_INCLUDE_DIR)
+    set(SDL2_LIBRARY "${DEVKITPRO}/portlibs/wiiu/lib/libSDL2.a")
+    set(SDL2_INCLUDE_DIR "${DEVKITPRO}/portlibs/wiiu/include/SDL2")
+  endif()
 endif()
 include_directories(SYSTEM "${SDL2_INCLUDE_DIR}")
 list(APPEND LIBS "${SDL2_LIBRARY}")
@@ -248,6 +256,9 @@ if(NOT GL_LIBRARY)
     set(GL_LIBRARY opengl32)
   elseif(NINTENDO_SWITCH)
     set(GL_LIBRARY EGL glapi drm_nouveau)
+  elseif(NINTENDO_WIIU)
+    # no OpenGL on the Wii U; the renderer uses GX2, which is part of wut
+    set(GL_LIBRARY "")
   elseif(APPLE)
     set(GL_LIBRARY "-framework OpenGL")
   else()
@@ -262,6 +273,8 @@ if(NOT EXTRA_LIBRARIES)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++)
   elseif(NINTENDO_SWITCH)
     set(EXTRA_LIBRARIES stdc++ pthread)
+  elseif(NINTENDO_WIIU)
+    set(EXTRA_LIBRARIES stdc++ m wut)
   else()
     set(EXTRA_LIBRARIES stdc++ m dl)
   endif()
@@ -272,6 +285,17 @@ list(APPEND LIBS "${EXTRA_LIBRARIES}")
 
 file(GLOB_RECURSE SRC_PORT "${CMAKE_SOURCE_DIR}/port/*.c")
 file(GLOB_RECURSE SRC_PORT_CXX "${CMAKE_SOURCE_DIR}/port/*.cpp")
+
+if(NINTENDO_WIIU)
+  # The Wii U has no OpenGL: drop the OpenGL renderer and the SDL+OpenGL
+  # window code. port/wiiu and port/fast3d/gfx_gx2.cpp replace them.
+  list(FILTER SRC_PORT EXCLUDE REGEX "/port/fast3d/glad/")
+  list(FILTER SRC_PORT_CXX EXCLUDE REGEX "/port/fast3d/(gfx_opengl|gfx_sdl2)\\.cpp$")
+else()
+  # Wii U-only code
+  list(FILTER SRC_PORT EXCLUDE REGEX "/port/wiiu/")
+  list(FILTER SRC_PORT_CXX EXCLUDE REGEX "/port/wiiu/|/port/fast3d/gfx_gx2\\.cpp$")
+endif()
 
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 
@@ -369,5 +393,17 @@ if(NINTENDO_SWITCH)
     COMMAND nacptool --create "Perfect Dark" "fgsfds and contributors" "${VERSION_ROMID}/${VERSION_BRANCH}/${VERSION_HASH}" "${BIN_NAME}.nacp"
     COMMAND aarch64-none-elf-strip -o ${CMAKE_BINARY_DIR}/${BIN_NAME}.stripped.elf ${CMAKE_BINARY_DIR}/${BIN_NAME}.elf
     COMMAND elf2nro ${CMAKE_BINARY_DIR}/${BIN_NAME}.stripped.elf ${CMAKE_BINARY_DIR}/${BIN_NAME}.nro --icon=${CMAKE_SOURCE_DIR}/dist/nswitch/icon.jpg --nacp=${BIN_NAME}.nacp
+  )
+elseif(NINTENDO_WIIU)
+  # .elf -> .rpx (the Wii U's executable format) -> .wuhb (an app bundle
+  # that Aroma shows on the Wii U menu, with its name and icon)
+  wut_create_rpx(pd)
+  wut_create_wuhb(pd
+    NAME "Perfect Dark"
+    SHORTNAME "Perfect Dark"
+    AUTHOR "Perfect Dark Wii U port contributors"
+    ICON "${CMAKE_SOURCE_DIR}/dist/wiiu/icon.png"
+    TVSPLASH "${CMAKE_SOURCE_DIR}/dist/wiiu/splash-tv.png"
+    DRCSPLASH "${CMAKE_SOURCE_DIR}/dist/wiiu/splash-drc.png"
   )
 endif()
