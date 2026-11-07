@@ -113,6 +113,20 @@ static float depth_near = 0.0f;
 static float depth_far = 1.0f;
 static int viewport[4];
 
+// The last settings Fast3D asked for. Fast3D remembers what it set and only
+// sends changes, so after the overlay (below) changes them, they're put back.
+static struct {
+    bool test, update, compare, source_prim;
+    uint16_t zmode;
+} last_depth = { true, true, true, false, ZMODE_OPA };
+static bool last_use_alpha, last_modulate;
+static int last_scissor[4] = { 0, 0, 1, 1 };
+
+// 2D drawing on top of each finished frame (the Wii U debug overlay)
+static GfxGx2OverlayFn overlay_fn;
+static struct ShaderProgram overlay_prg;
+static bool overlay_prg_ready;
+
 static const char* gfx_gx2_get_name(void) {
     return "GX2";
 }
@@ -304,6 +318,8 @@ static void gfx_gx2_set_sampler_parameters(int tile, bool linear_filter, uint32_
 
 static void gfx_gx2_set_depth_mode(bool depth_test, bool depth_update, bool depth_compare, bool depth_source_prim,
                                    uint16_t zmode) {
+    last_depth = { depth_test, depth_update, depth_compare, depth_source_prim, zmode };
+
     // the same rules as gfx_opengl.cpp
     GX2CompareFunction func = GX2_COMPARE_FUNC_ALWAYS;
     bool decal = false;
@@ -362,6 +378,11 @@ static void gfx_gx2_set_viewport(int x, int y, int width, int height) {
 }
 
 static void gfx_gx2_set_scissor(int x, int y, int width, int height) {
+    last_scissor[0] = x;
+    last_scissor[1] = y;
+    last_scissor[2] = width;
+    last_scissor[3] = height;
+
     const int fb_w = current_framebuffer ? (int)current_framebuffer->color_buffer.surface.width : 1;
     const int fb_h = (int)current_fb_height();
 
@@ -381,6 +402,8 @@ static void gfx_gx2_set_scissor(int x, int y, int width, int height) {
 }
 
 static void gfx_gx2_set_use_alpha(bool use_alpha, bool modulate) {
+    last_use_alpha = use_alpha;
+    last_modulate = modulate;
     GX2SetColorControl(GX2_LOGIC_OP_COPY, use_alpha ? 0xff : 0x00, FALSE, TRUE);
     if (modulate) {
         GX2SetBlendControl(GX2_RENDER_TARGET_0, GX2_BLEND_MODE_DST_COLOR, GX2_BLEND_MODE_ZERO,
@@ -553,7 +576,64 @@ static void gfx_gx2_start_frame(void) {
     frame_count++;
 }
 
+// Draws the overlay over the finished picture, then restores Fast3D's settings.
+static void gfx_gx2_draw_overlay(void) {
+    if (!overlay_prg_ready) {
+        // one fixed combiner setup: texture colour times vertex colour, with alpha
+        // (combiner slots: TEXEL0, 0, INPUT_1, 0 for colour and for alpha)
+        struct CCFeatures cc;
+        const uint64_t id0 = 0x0108 | (0x0108ull << 16);
+        gfx_cc_get_features(id0, SHADER_OPT_ALPHA, &cc);
+        if (gx2GenerateShaderGroup(&overlay_prg.group, &cc) != 0) {
+            overlay_fn = nullptr;
+            return;
+        }
+        overlay_prg.num_inputs = cc.num_inputs;
+        overlay_prg.used_textures[0] = true;
+        overlay_prg_ready = true;
+    }
+
+    GX2SetColorBuffer(&main_framebuffer.color_buffer, GX2_RENDER_TARGET_0);
+    GX2SetDepthBuffer(&main_framebuffer.depth_buffer);
+    GX2SetViewport(0.0f, 0.0f, main_framebuffer.color_buffer.surface.width,
+                   main_framebuffer.color_buffer.surface.height, 0.0f, 1.0f);
+    GX2SetScissor(0, 0, main_framebuffer.color_buffer.surface.width, main_framebuffer.color_buffer.surface.height);
+    GX2SetDepthOnlyControl(FALSE, FALSE, GX2_COMPARE_FUNC_ALWAYS);
+    GX2SetPolygonOffset(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    GX2SetPolygonControl(GX2_FRONT_FACE_CCW, FALSE, FALSE, FALSE, GX2_POLYGON_MODE_TRIANGLE,
+                         GX2_POLYGON_MODE_TRIANGLE, FALSE, FALSE, FALSE);
+    GX2SetColorControl(GX2_LOGIC_OP_COPY, 0xff, FALSE, TRUE);
+    GX2SetBlendControl(GX2_RENDER_TARGET_0, GX2_BLEND_MODE_SRC_ALPHA, GX2_BLEND_MODE_INV_SRC_ALPHA,
+                       GX2_BLEND_COMBINE_MODE_ADD, FALSE, GX2_BLEND_MODE_ZERO, GX2_BLEND_MODE_ZERO,
+                       GX2_BLEND_COMBINE_MODE_ADD);
+    GX2SetFetchShader(&overlay_prg.group.fetchShader);
+    GX2SetVertexShader(&overlay_prg.group.vertexShader);
+    GX2SetPixelShader(&overlay_prg.group.pixelShader);
+
+    overlay_fn();
+
+    // put back what Fast3D last set
+    gfx_gx2_set_depth_mode(last_depth.test, last_depth.update, last_depth.compare, last_depth.source_prim,
+                           last_depth.zmode);
+    gfx_gx2_set_use_alpha(last_use_alpha, last_modulate);
+    if (current_framebuffer) {
+        GX2SetColorBuffer(&current_framebuffer->color_buffer, GX2_RENDER_TARGET_0);
+        if (current_framebuffer->has_depth) {
+            GX2SetDepthBuffer(&current_framebuffer->depth_buffer);
+        }
+    }
+    gfx_gx2_apply_viewport();
+    gfx_gx2_set_scissor(last_scissor[0], last_scissor[1], last_scissor[2], last_scissor[3]);
+    if (current_shader_program) {
+        gfx_gx2_load_shader(current_shader_program);
+    }
+}
+
 static void gfx_gx2_end_frame(void) {
+    if (overlay_fn) {
+        gfx_gx2_draw_overlay();
+    }
+
     // Copy the finished picture to the TV's and the GamePad's screen buffers.
     // GX2 scales it to each screen's size. The window manager then shows it.
     GX2CopyColorBufferToScanBuffer(&main_framebuffer.color_buffer, GX2_SCAN_TARGET_TV);
@@ -692,6 +772,86 @@ static void gfx_gx2_set_anisotropy_level(int level) {
 
 static int gfx_gx2_get_max_anisotropy_level(void) {
     return 1;
+}
+
+extern "C" void gfx_gx2_set_overlay(GfxGx2OverlayFn fn) {
+    overlay_fn = fn;
+}
+
+extern "C" void gfx_gx2_get_stats(struct GfxGx2Stats* out) {
+    out->draws = stat_draws;
+    out->triangles = stat_tris;
+    out->skipped = stat_skipped;
+    out->vertex_bytes = (uint32_t)(draw_ptr - draw_buffer);
+    out->shaders = (uint32_t)shader_program_pool.size();
+}
+
+extern "C" uint32_t gfx_gx2_overlay_texture(const uint8_t* rgba, uint32_t width, uint32_t height) {
+    const uint32_t id = gfx_gx2_new_texture();
+    struct Texture* saved = bound_textures[0];
+    const int saved_tile = current_tile;
+
+    bound_textures[0] = (struct Texture*)(uintptr_t)id;
+    current_tile = 0;
+    gfx_gx2_upload_texture(rgba, width, height, false);
+    GX2InitSampler(&bound_textures[0]->sampler, GX2_TEX_CLAMP_MODE_CLAMP, GX2_TEX_XY_FILTER_MODE_POINT);
+
+    bound_textures[0] = saved;
+    current_tile = saved_tile;
+    return id;
+}
+
+extern "C" void gfx_gx2_overlay_quads(uint32_t texture_id, const struct GfxGx2Quad* quads, size_t count) {
+    struct Texture* tex = (struct Texture*)(uintptr_t)texture_id;
+    if (!tex || !tex->uploaded || count == 0 || !overlay_prg_ready) {
+        return;
+    }
+
+    // per vertex: position (4 floats), texture coordinate (2), colour (4)
+    const size_t floats_per_vertex = 10;
+    const size_t size = count * 6 * floats_per_vertex * sizeof(float);
+    if (draw_ptr + size > draw_buffer + DRAW_BUFFER_SIZE) {
+        return;
+    }
+    float* vbo = (float*)draw_ptr;
+    draw_ptr += ALIGN_UP(size, GX2_VERTEX_BUFFER_ALIGNMENT);
+
+    // pixels to the GPU's -1..1 coordinates, y pointing up
+    const float sx = 2.0f / main_framebuffer.color_buffer.surface.width;
+    const float sy = 2.0f / main_framebuffer.color_buffer.surface.height;
+
+    float* v = vbo;
+    for (size_t i = 0; i < count; i++) {
+        const struct GfxGx2Quad* q = &quads[i];
+        const float x0 = q->x0 * sx - 1.0f, x1 = q->x1 * sx - 1.0f;
+        const float y0 = 1.0f - q->y0 * sy, y1 = 1.0f - q->y1 * sy;
+        const float r = ((q->rgba >> 24) & 0xff) / 255.0f;
+        const float g = ((q->rgba >> 16) & 0xff) / 255.0f;
+        const float b = ((q->rgba >> 8) & 0xff) / 255.0f;
+        const float a = (q->rgba & 0xff) / 255.0f;
+        const float corners[6][4] = {
+            { x0, y0, q->u0, q->v0 }, { x1, y0, q->u1, q->v0 }, { x0, y1, q->u0, q->v1 },
+            { x1, y0, q->u1, q->v0 }, { x1, y1, q->u1, q->v1 }, { x0, y1, q->u0, q->v1 },
+        };
+        for (int c = 0; c < 6; c++) {
+            *v++ = corners[c][0];
+            *v++ = corners[c][1];
+            *v++ = 0.0f;
+            *v++ = 1.0f;
+            *v++ = corners[c][2];
+            *v++ = corners[c][3];
+            *v++ = r;
+            *v++ = g;
+            *v++ = b;
+            *v++ = a;
+        }
+    }
+
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, vbo, size);
+    GX2SetPixelTexture(&tex->texture, 0);
+    GX2SetPixelSampler(&tex->sampler, 0);
+    GX2SetAttribBuffer(0, size, overlay_prg.group.stride, vbo);
+    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, count * 6, 0, 1);
 }
 
 struct GfxRenderingAPI gfx_gx2_api = {

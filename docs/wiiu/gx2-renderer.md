@@ -92,6 +92,16 @@ internally, so the back end switches back to its context after those too.
   program that reads vertex data) is told each attribute's real size and
   fills in the rest. That keeps the shared `gfx_pc.cpp` untouched.
 
+## The debug overlay
+
+The overlay (ZL + Minus, see [wiiu-build.md](wiiu-build.md)) is drawn by the
+same back end, after the game's frame and before it's copied to the screens.
+It uses one fixed shader: texture colour times vertex colour, made by the
+same generator from a hand-written combiner setup. Its text uses the 8×8 font
+from the startup page, uploaded as a texture. Fast3D only sends settings that
+change, so after the overlay the back end puts back the last viewport,
+scissor, depth, blending and shader that Fast3D set.
+
 ## Memory
 
 Everything (framebuffers, textures, vertices) is in MEM2, the main memory.
@@ -103,7 +113,7 @@ framebuffers there is a phase 6 (speed) job.
 
 | Stage | What | Status |
 |---|---|---|
-| 1 | Set up our own drawing, shaders, textures, blending, depth, fog | Written, waiting for a hardware test |
+| 1 | Set up our own drawing, shaders, textures, blending, depth, fog | Done: tested on a Wii U, the title, menus and a new game look right |
 | 2–3 | Check menus, text and 3D levels; fix what's wrong | After stage 1's test |
 | 4 | Effects that copy the screen: blurred menu backgrounds, night vision, sun flares (`copy_framebuffer`) | Not started |
 

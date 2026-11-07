@@ -9,8 +9,7 @@
 // Public domain 8x8 font. In each byte the lowest bit is the leftmost pixel.
 #include "../../third_party/font8x8/font8x8_basic.h"
 
-#define FONT_COLS 16
-#define FONT_ROWS 8
+#define FONT_COLS (WIIU_FONT_ATLAS_W / WIIU_GLYPH_SIZE)
 
 #define LOG_LINES 24
 #define LOG_LINE_LEN 160
@@ -26,27 +25,32 @@ static char logLines[LOG_LINES][LOG_LINE_LEN];
 static int logNext;
 static int logCount;
 
-static void screenCreateFont(void)
+void wiiuScreenFontAtlas(Uint32 *pixels)
 {
-	// Put all 128 glyphs into one 128x64 texture: white where the glyph has a
-	// pixel, transparent elsewhere. Text is then drawn by copying glyphs out of it.
-	static Uint32 pixels[FONT_ROWS * WIIU_GLYPH_SIZE][FONT_COLS * WIIU_GLYPH_SIZE];
-
+	// All 128 glyphs in one 128x64 picture: white where the glyph has a
+	// pixel, transparent elsewhere. Text is drawn by copying glyphs out of it.
 	for (int c = 0; c < 128; ++c) {
 		const int gx = (c % FONT_COLS) * WIIU_GLYPH_SIZE;
 		const int gy = (c / FONT_COLS) * WIIU_GLYPH_SIZE;
 		for (int y = 0; y < WIIU_GLYPH_SIZE; ++y) {
-			const unsigned char bits = (unsigned char)font8x8_basic[c][y];
+			// character 127 (unused in text) is a solid block, for drawing boxes
+			const unsigned char bits = c == WIIU_FONT_SOLID ? 0xff : (unsigned char)font8x8_basic[c][y];
 			for (int x = 0; x < WIIU_GLYPH_SIZE; ++x) {
-				pixels[gy + y][gx + x] = (bits & (1 << x)) ? 0xffffffff : 0;
+				pixels[(gy + y) * WIIU_FONT_ATLAS_W + gx + x] = (bits & (1 << x)) ? 0xffffffff : 0;
 			}
 		}
 	}
+}
+
+static void screenCreateFont(void)
+{
+	static Uint32 pixels[WIIU_FONT_ATLAS_H * WIIU_FONT_ATLAS_W];
+	wiiuScreenFontAtlas(pixels);
 
 	fontTex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STATIC,
-		FONT_COLS * WIIU_GLYPH_SIZE, FONT_ROWS * WIIU_GLYPH_SIZE);
+		WIIU_FONT_ATLAS_W, WIIU_FONT_ATLAS_H);
 	if (fontTex) {
-		SDL_UpdateTexture(fontTex, NULL, pixels, sizeof(pixels[0]));
+		SDL_UpdateTexture(fontTex, NULL, pixels, WIIU_FONT_ATLAS_W * sizeof(Uint32));
 		SDL_SetTextureBlendMode(fontTex, SDL_BLENDMODE_BLEND);
 	}
 }
@@ -116,7 +120,7 @@ int wiiuScreenText(int x, int y, int scale, Uint32 rgb, const char *text)
 			}
 		}
 
-		if (c < 128 && c != ' ') {
+		if (c < WIIU_FONT_SOLID && c != ' ') {
 			const SDL_Rect src = {
 				(c % FONT_COLS) * WIIU_GLYPH_SIZE, (c / FONT_COLS) * WIIU_GLYPH_SIZE,
 				WIIU_GLYPH_SIZE, WIIU_GLYPH_SIZE

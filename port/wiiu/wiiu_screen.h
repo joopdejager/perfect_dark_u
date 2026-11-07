@@ -2,8 +2,8 @@
 #define _IN_WIIU_SCREEN_H
 
 // A minimal text screen for the Wii U, drawn with SDL's built-in GX2 2D
-// renderer. It needs no GX2 code of our own, so it works before the real
-// renderer (phase 4) exists. Used for error messages and the status screen.
+// renderer. It needs no GX2 code of our own, so it works before the game's
+// renderer has started. Used for the startup page and error messages.
 
 #include <SDL.h>
 
@@ -16,6 +16,16 @@ extern "C" {
 
 // Size of one character cell at scale 1, in pixels.
 #define WIIU_GLYPH_SIZE 8
+
+// The font as one picture: 16 x 8 glyphs, character c at column c % 16,
+// row c / 16. Character WIIU_FONT_SOLID is a filled block, for boxes.
+#define WIIU_FONT_ATLAS_W 128
+#define WIIU_FONT_ATLAS_H 64
+#define WIIU_FONT_SOLID 127
+
+// Fills `pixels` (WIIU_FONT_ATLAS_W x WIIU_FONT_ATLAS_H) with the font:
+// 0xffffffff where a glyph has a pixel, 0 elsewhere.
+void wiiuScreenFontAtlas(Uint32 *pixels);
 
 // Returns the shared window renderer, creating the SDL window on first use.
 // Returns NULL if SDL video could not be started.

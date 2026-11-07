@@ -62,6 +62,33 @@ so the ROM goes in `sdcard/wiiu/apps/perfectdark/data/` there.
 Any other startup problem shows the same error page with its message, so
 problems can be read off the screen without a PC attached.
 
+## Debug overlay
+
+Hold **ZL** and press **Minus** to show or hide numbers in the top left
+corner:
+
+| Line | Meaning |
+|---|---|
+| FPS | Frames shown per second (the screen refreshes at 60) |
+| frame, worst | Average and longest time between frames over the last half second |
+| CPU busy, GPU wait | How much of each frame the CPU spent working (game logic and preparing the drawing) and how long it then waited for the GPU to show the previous frame. A short wait with a low FPS means the CPU is the bottleneck. |
+| draws, tris, verts | What the renderer sent to the GPU that frame |
+| shaders, free mem | Shaders made so far, and free main memory |
+
+ZL alone wasn't usable for this: by default it's R, the aim button. Minus
+isn't used by the game. The toggle is in `port/wiiu/gfx_wiiu.c`
+(`wiiu_handle_events`), the overlay in `port/wiiu/wiiu_overlay.c`.
+
+## Name entry keyboard
+
+The PC port adds a "TYPE WITH KEYBOARD" row to the game's on-screen keyboard.
+It switches to typing on a real keyboard, and you leave it with Esc, which a
+Wii U doesn't have. The Wii U build leaves the row out and keeps the N64's
+five-row keyboard (`src/game/menuitem.c`, `MENU_KEYBOARD_ROWS`).
+
+Ideas for later (phase 5): use the Wii U's own on-screen keyboard for names,
+and the GamePad's touch screen for menus.
+
 While the game starts up, a "Starting up..." page lists its log messages as
 they happen. If startup hangs, the last line on screen shows where. The full
 log is also saved to `sd:/wiiu/apps/perfectdark/pd.log` on every run (with the

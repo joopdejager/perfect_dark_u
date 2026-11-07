@@ -28,6 +28,7 @@
 #include "../fast3d/gfx_window_manager_api.h"
 #include "wiiu.h"
 #include "wiiu_screen.h"
+#include "wiiu_overlay.h"
 
 static SDL_Renderer *ren;
 static int targetFps = 60;
@@ -116,6 +117,14 @@ static void wiiu_handle_events(void)
 		if (ev.type == SDL_QUIT) {
 			exit(0);
 		}
+		// ZL + Minus shows or hides the debug overlay. ZL alone is a game
+		// button (aim, by default), Minus isn't used by the game.
+		if (ev.type == SDL_CONTROLLERBUTTONDOWN && ev.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+			SDL_GameController *gc = SDL_GameControllerFromInstanceID(ev.cbutton.which);
+			if (gc && SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16384) {
+				wiiuOverlayToggle();
+			}
+		}
 	}
 }
 
@@ -125,15 +134,18 @@ static bool wiiu_start_frame(void)
 	// the screen, and it means the GPU is done with the previous frame's
 	// vertex data, so gfx_gx2.cpp can reuse that memory. If the GPU takes
 	// longer than 10 screen refreshes, skip this frame.
+	const OSTime start = OSGetSystemTime();
 	for (int waits = 0; waits < 10; ++waits) {
 		uint32_t swapCount, flipCount;
 		OSTime lastFlip, lastVsync;
 		GX2GetSwapStatus(&swapCount, &flipCount, &lastFlip, &lastVsync);
 		if (flipCount >= swapCount) {
+			wiiuOverlayFrameWaited(OSGetSystemTime() - start);
 			return true;
 		}
 		GX2WaitForVsync();
 	}
+	wiiuOverlayFrameWaited(OSGetSystemTime() - start);
 	return false;
 }
 
@@ -149,6 +161,7 @@ static void wiiu_swap_buffers_begin(void)
 	// gfx_gx2.cpp has copied the frame into the screen buffers; show it
 	GX2SwapScanBuffers();
 	GX2Flush();
+	wiiuOverlayFrameShown();
 	GX2SetTVEnable(TRUE);
 	GX2SetDRCEnable(TRUE);
 }
