@@ -44,9 +44,16 @@ second back end that turns them into GX2 calls, GX2 being the Wii U's graphics A
 | `port/wiiu/` | Wii U platform layer: startup, file paths on the SD card, input, audio output |
 | `dist/wiiu/` | Packaging files: icon, app metadata for the `.wuhb` package |
 | `third_party/` | Code borrowed from other projects, each keeping its own licence |
-| `docs/wiiu/` | This documentation ([linux-build.md](linux-build.md): building and running the PC version) |
+| `docs/wiiu/` | This documentation |
+| `tools/wiiu/` | Build and test scripts |
 
-None of these exist yet except this folder. The table shows where things will go.
+`gfx_gx2.cpp` is still a placeholder; phase 4 fills it in.
+
+Notes so far:
+
+- [linux-build.md](linux-build.md): building and running the PC version.
+- [big-endian.md](big-endian.md): making the port work on big-endian CPUs, tested under QEMU.
+- [wiiu-build.md](wiiu-build.md): building, installing and running the Wii U app.
 
 ## Why this route
 
@@ -77,7 +84,11 @@ None of these exist yet except this folder. The table shows where things will go
 | 5. Input and audio | GamePad, Pro Controller, Wii Remotes; audio output | Playable start to finish |
 | 6. Speed | Profiling, using all 3 CPU cores, faster vertex maths | Smooth in single player, then multiplayer |
 
-Current phase: **3, Wii U build.** Phase 1 is done ([linux-build.md](linux-build.md)), and so is phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
+Current phase: **4, GX2 renderer.** Done so far:
+
+- Phase 1: the Linux build ([linux-build.md](linux-build.md)).
+- Phase 2: the game runs correctly on big-endian PowerPC under QEMU ([big-endian.md](big-endian.md)).
+- Phase 3: an installable `.wuhb` that runs the game natively on a real Wii U, with audio, but doesn't draw it yet ([wiiu-build.md](wiiu-build.md)).
 
 ## Keeping up with the PC port
 
@@ -103,6 +114,7 @@ checks, so these merges stay easy.
 - Decompilation and PC port: MIT (`LICENSE`).
 - Fast3D renderer: MIT (`port/fast3d/LICENSE.txt`).
 - Anything added under `third_party/` keeps its own licence, recorded next to it.
+  So far: `font8x8` (public domain), used for the Wii U's text pages.
   Code under GPL, such as GLideN64 or Our64's own code, isn't copied in, because
   it would make the whole port GPL. Reading it for reference is fine.
 

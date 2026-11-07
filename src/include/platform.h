@@ -7,6 +7,10 @@
 #elif defined(__SWITCH__)
 	#define PLATFORM_POSIX 1
 	#define PLATFORM_NSWITCH 1
+#elif defined(__WIIU__)
+	// Wii U homebrew (devkitPPC + wut); see port/wiiu/
+	#define PLATFORM_POSIX 1
+	#define PLATFORM_WIIU 1
 #elif defined(__linux__)
 	#define PLATFORM_POSIX 1
 	#define PLATFORM_LINUX 1

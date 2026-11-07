@@ -99,7 +99,12 @@ s32 fsInit(void)
 	sysGetExecutablePath(exeDir, FS_MAXPATH);
 
 	// if this is set, default to exe path for everything
+#ifdef PLATFORM_WIIU
+	// on the Wii U everything lives in the app's folder on the SD card
+	const s32 portable = 1;
+#else
 	const s32 portable = sysArgCheck("--portable");
+#endif
 	if (portable) {
 		strcpy(homeDir, exeDir);
 	} else {

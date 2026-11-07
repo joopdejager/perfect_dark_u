@@ -3,6 +3,7 @@
 #include <PR/ultratypes.h>
 #include <PR/ultrasched.h>
 #include <PR/os_message.h>
+#include "platform.h"
 
 #include "lib/main.h"
 #include "bss.h"
@@ -92,6 +93,12 @@ static void cleanup(void)
 	crashShutdown();
 	// TODO: actually shut down all subsystems
 }
+
+#ifdef PLATFORM_WIIU
+// port/wiiu/wiiu_main.c provides the real main(), which runs this one on a
+// bigger stack than the Wii U gives the main thread
+#define main pdMain
+#endif
 
 int main(int argc, const char **argv)
 {

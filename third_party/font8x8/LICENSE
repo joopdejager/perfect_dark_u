@@ -1,0 +1,7 @@
+font8x8_basic.h and README are from https://github.com/dhepper/font8x8
+by Daniel Hepper, based on public domain VGA fonts (Marcel Sondaar, IBM).
+
+License: Public Domain (as stated in both files).
+
+Used by port/wiiu/wiiu_screen.c to draw text on the Wii U's error and
+status pages. Unmodified.
